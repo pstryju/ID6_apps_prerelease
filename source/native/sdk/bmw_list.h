@@ -37,6 +37,7 @@ public:
     BasicString(const BasicString& o);           // _ZN3bmw11BasicStringIcEC1ERKS1_
     ~BasicString();                              // _ZN3bmw11BasicStringIcED1Ev
     BasicString& operator=(const BasicString&);  // _ZN3bmw11BasicStringIcEaSERKS1_
+    const T* c_str() const { return m_data; }
 };
 
 // --- 4-byte POD passed by value
@@ -194,6 +195,7 @@ public:
     // BoostDeck addition: scalar overload documented in SDK docs/06 and docs/15.
     // Must be verified against the user's libAppFramework before a target build.
     void updateModel(unsigned int model, int value);
+    void updateModel(unsigned int model, bool value);
     void updateModel(unsigned int model, const ImageID& image);
     void updateModel(unsigned int model, const TextID& t);               // 0x52dc
     void addHandler (unsigned int action, const Delegate<bool, const Parcel&>& d);                 // 0x5970
@@ -202,6 +204,13 @@ public:
     // event 11 = visibility (key 23: bool visible). OEM ActiveSeating registers both for its states (0xd7f8, 0xd81c).
     void addHandlerWithMap(unsigned int state, unsigned int event,
                            const Delegate<bool, const Map<unsigned int, Variant>&>& d);
+    // Read-only CDS subscriptions. Both signatures are exported by Y24073J
+    // and used by the adjacent native Android Auto project on this unit.
+    void cdsAddPropertyChangedEventHandler(BasicString<char>& property, unsigned int id,
+                         const Delegate<bool, const BasicString<unsigned short>&>& handler);
+    void cdsRemovePropertyChangedEventHandler(BasicString<char>& property);
+    void cdsGetPropertyAsync(BasicString<char>& property,
+        const Delegate<bool,const BasicString<unsigned short>&>& callback);
     // set a component PROPERTY (e.g. SELECTABLE=2 -> enabled/greyed) at runtime:
     void setProperty(unsigned int component, unsigned int prop, const Parcel& value);  // _ZN3bmw9PluginApp11setPropertyEjjRKNS_6ParcelE 0x54a4
     // fire a DescFile <events> entry, e.g. a popupEvent (opens its popupHmiState). The HMI reads a Parcel(bool) as the

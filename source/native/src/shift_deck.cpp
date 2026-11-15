@@ -1,8 +1,12 @@
 #include "plugin_factory.h"
 #include "diagnostic_worker.h"
+#include "gateway_config.h"
 #include "drive_frame.h"
 #include "gauge_core.h"
 #include "shift_assets.h"
+#ifdef BD_NATIVE_CDS
+#include "cds_telemetry.h"
+#endif
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -18,6 +22,9 @@ const unsigned kEaseMs=50;
 }
 
 class ShiftDeck : public bmw::PluginApp {
+#ifdef BD_NATIVE_CDS
+    CdsTelemetry cds_;
+#endif
     int socket_;
     pid_t child_;
     unsigned generation_;
@@ -53,6 +60,9 @@ class ShiftDeck : public bmw::PluginApp {
         visible_=false;
         ++generation_;
         stopChild();
+#ifdef BD_NATIVE_CDS
+        cds_.stop();
+#endif
         if (socket_>=0) { close(socket_); socket_=-1; }
     }
     void postPoll() {
@@ -74,6 +84,11 @@ class ShiftDeck : public bmw::PluginApp {
                   now-frame_.sampled_ms<DRIVE_STALE_MS;
         int rpm=live ? frame_.rpm : -1;
         int kph=live ? frame_.kph : -1;
+#ifdef BD_NATIVE_CDS
+        double v;
+        if(!cds_.get(0,now,v))rpm=-1;
+        if(!cds_.get(1,now,v)||!cds_.get(9,now,v))kph=-1;
+#endif
         int target=static_cast<int>(kShiftTargets[target_]);
         bool shift=rpm>=target;
         int displayed_rpm=rpm;
@@ -129,6 +144,9 @@ class ShiftDeck : public bmw::PluginApp {
 #ifdef NATIVE_SHIFT_SMOOTH
         rpm_started_=0;
 #endif
+#ifdef BD_NATIVE_CDS
+        if(show)cds_.start(515u);else cds_.stop();
+#endif
         if (show) retry_at_=0;
         else stopChild();
         draw(bd_mono_ms());
@@ -160,7 +178,11 @@ class ShiftDeck : public bmw::PluginApp {
 public:
     ShiftDeck(bmw::IDispatcher& d,bmw::BasicString<char> name,unsigned maj,unsigned min,
               bmw::RHMIInterfaceVersion version,const bmw::Bundle& cfg,const bmw::Bundle& res)
-        : PluginApp(d,name,maj,min,version,cfg,res),socket_(-1),child_(-1),generation_(0),
+        : PluginApp(d,name,maj,min,version,cfg,res),
+#ifdef BD_NATIVE_CDS
+          cds_(*this),
+#endif
+          socket_(-1),child_(-1),generation_(0),
           visible_(false),target_(kDefaultTarget),retry_at_(0),bar_(0),lights_(0),
           rpm_(-2),kph_(-2),shift_(false) {
         memset(&frame_,0,sizeof frame_);
@@ -179,6 +201,7 @@ public:
         lights_=static_cast<unsigned>(-1);
         rpm_=kph_=-2;
         shift_=false;
+#ifndef BD_NATIVE_CDS
         socket_=socket(AF_INET,SOCK_DGRAM,0);
         if (socket_>=0) {
             struct sockaddr_in address;
@@ -192,6 +215,7 @@ public:
                 socket_=-1;
             }
         }
+#endif
         typedef bmw::Delegate<bool,const bmw::Parcel&> Action;
         Action action;
         action.m_obj=this;
@@ -207,7 +231,7 @@ public:
         addHandler(44u,action);
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setTarget<4> >;
         addHandler(45u,action);
-#ifdef NATIVE_SHIFT_SMOOTH
+#if defined(NATIVE_SHIFT_SMOOTH) && !defined(BD_NATIVE_CDS)
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setUnits<false> >;
         addHandler(46u,action);
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setUnits<true> >;
@@ -217,18 +241,45 @@ public:
         updateModel(57u,bmw::ImageID(kShiftOff));
         showTarget();
         draw(bd_mono_ms());
+#ifdef BD_NATIVE_CDS
+        if(!cds_.ready())return false;
+        postPoll();
+#else
         if (socket_>=0) postPoll();
+#endif
         return true;
     }
     virtual bool invokeDataUpdate(unsigned key,const bmw::Parcel& data) {
         if (key!=kShiftPoll) return PluginApp::invokeDataUpdate(key,data);
         unsigned generation;
         if (!data.readUInt32(generation)) return false;
-        if (generation!=generation_ || socket_<0) return true;
+        if (generation!=generation_) return true;
+#ifdef BD_NATIVE_CDS
+        uint64_t now=bd_mono_ms();cds_.tick(now);
+        double v;
+        if(cds_.get(9,now,v)){
+            bool metric=v==1;
+            if(metric!=metric_){metric_=metric;kph_=-2;updateModel(64u,bmw::ImageID(metric_?56660u:55916u));}
+        }
+        drive_frame next;memset(&next,0,sizeof next);
+        next.sampled_ms=now;next.rpm=next.kph=-1;
+        if(cds_.get(0,now,v))next.rpm=static_cast<int>(v+.5);
+        if(cds_.get(1,now,v))next.kph=static_cast<int>(v+.5);
+#ifdef NATIVE_SHIFT_SMOOTH
+        if(next.rpm!=frame_.rpm){
+            bool continuous=next.rpm>=0&&frame_.rpm>=0&&frame_.sampled_ms;
+            rpm_from_=continuous?animatedRpm(now):next.rpm;rpm_started_=continuous?now:0;
+        }
+#endif
+        frame_=next;draw(now);postPoll();return true;
+#else
+        if(socket_<0)return true;
         reap();
         uint64_t now=bd_mono_ms();
         if (visible_ && child_<=0 && now>=retry_at_) {
-            const char* args[]={kShiftWorker,"--host","169.254.21.3",0};
+            char gateway[16];
+            if (!bd_load_gateway(kShiftWorker,gateway)) { retry_at_=now+2000; postPoll(); return true; }
+            const char* args[]={kShiftWorker,"--host",gateway,0};
             child_=launch(args,-1);
             retry_at_=now+1000;
         }
@@ -253,6 +304,7 @@ public:
         draw(now);
         postPoll();
         return true;
+#endif
     }
 };
 
