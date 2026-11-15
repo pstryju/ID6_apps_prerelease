@@ -1,5 +1,6 @@
 #include "plugin_factory.h"
 #include "diagnostic_worker.h"
+#include "gateway_config.h"
 #include "dme_descriptions.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -8,7 +9,6 @@
 namespace {
 const unsigned kCodesPollKey = 0x4543504cu;
 const unsigned kCodePageSize = 4;
-const char kCodesGateway[] = "169.254.21.3";
 const char kEngineWorker[] = "/var/opt/hmi/data/ID5/Plugins/EngineCodes/engine-codes-qnx";
 
 void format_code_line(char* text, size_t size, const char* line, int length, char* detail, size_t detail_size) {
@@ -122,12 +122,17 @@ public:
 
 void EngineCodes::startCodes(bool clear) {
     if (codes_fd_>=0 || codes_pid_>0) return;
+    char gateway[16];
+    if (!bd_load_gateway(worker_,gateway)) {
+        updateModel(80u,bmw::BasicString<char>("Invalid gateway-ip.txt"));
+        return;
+    }
     int channel[2];
     if (pipe(channel)<0) {
         updateModel(80u,bmw::BasicString<char>("Could not start diagnostics"));
         return;
     }
-    const char *args[]={worker_,"--host",kCodesGateway,clear ? "--clear" : "--codes",0};
+    const char *args[]={worker_,"--host",gateway,clear ? "--clear" : "--codes",0};
     if (fcntl(channel[0],F_SETFL,O_NONBLOCK)>=0 &&
         fcntl(channel[0],F_SETFD,FD_CLOEXEC)>=0 && fcntl(channel[1],F_SETFD,FD_CLOEXEC)>=0)
         codes_pid_=launch(args,channel[1]);

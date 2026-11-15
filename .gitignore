@@ -1,0 +1,6 @@
+/.local/
+/source/native/build/
+/source/native/out/
+/source/native/frameworks/
+/source/native/runtime/
+__pycache__/

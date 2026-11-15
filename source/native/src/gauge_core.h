@@ -10,6 +10,10 @@ enum { BD_BOOST, BD_AFR, BD_TIMING, BD_IAT, BD_TRANS, BD_RAIL, BD_OIL, BD_COOLAN
        BD_ETHANOL,
 #endif
        BD_COUNT };
+#if defined(PERF_LAB) && defined(BD_STOCK_DME)
+/* Slot 8 has a distinct NBG5 wire format in the stock-DME build. */
+#define BD_OIL_TEMP BD_ETHANOL
+#endif
 enum { BD_MAX_PACKET = 512, BD_STALE_MS = 2500, BD_TEMP_STALE_MS = 3500,
        BD_UDP_PORT = 42860 };
 typedef struct {
@@ -21,6 +25,7 @@ typedef struct {
 } bd_frame;
 uint64_t bd_mono_ms(void);
 int bd_decode_did(unsigned did, const unsigned char *data, size_t len, double *out);
+int bd_decode_obd(unsigned pid, const unsigned char *data, size_t len, double *out);
 int bd_encode(const bd_frame *f, char *out, size_t len);
 int bd_parse(const char *data, size_t len, bd_frame *out);
 int bd_is_fresh(const bd_frame *f, unsigned i, uint64_t elapsed_ms);

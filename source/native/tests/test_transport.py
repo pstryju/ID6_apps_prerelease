@@ -48,6 +48,9 @@ class TransportTest(unittest.TestCase):
             try:
                 conn, _ = server.accept()
                 with conn:
+                    # Fragmented writes must not add Nagle/delayed-ACK latency
+                    # to the explicit 30 ms ECU delay used by the timing test.
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                     conn.settimeout(3)
                     while True:
                         first = conn.recv(1)

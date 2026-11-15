@@ -55,10 +55,11 @@ static int connect_gw(const char *host, unsigned port) {
     if (connect(fd, (struct sockaddr *)&a, sizeof a) < 0 && errno != EINPROGRESS) {
         close(fd); return -1;
     }
-    if (!ready(fd, POLLOUT, bd_mono_ms() + 1000) ||
-        getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) || error) {
-        close(fd); return -1;
+    if (!ready(fd, POLLOUT, bd_mono_ms() + 1000)) { close(fd); errno=ETIMEDOUT; return -1; }
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len)) {
+        int saved=errno;close(fd);errno=saved;return -1;
     }
+    if(error){close(fd);errno=error;return -1;}
     return fd;
 }
 
@@ -111,6 +112,47 @@ static unsigned number(const char *s, unsigned lo, unsigned hi) {
 #if defined(BM3_ONLY) || defined(XDRIVE_ONLY)
 #include <ctype.h>
 #include "controls.c"
+#elif defined(DIAGNOSTIC_PROBE_ONLY)
+int main(int argc,char **argv) {
+    unsigned port=6801,negative,i,j,count;int lock,fd=-1,n,signals=0,arg;
+    const unsigned char requests[12][3]={{1,0x0c,0},{1,5,0},{0x22,0x43,0},{0x22,0x56,0xd7},
+        {1,0x23,0},{1,0x5c,0},{1,0x42,0},{1,4,0},{0x22,0x42,1},{0x22,0x42,5},{1,0x0b,0},{1,0x33,0}};
+    const char *labels[12]={"RPM","coolant","BMW-coolant","BMW-rail","OBD-rail","oil-temperature",
+        "DME-voltage","engine-load","BMW-ambient","BMW-charge","OBD-MAP","OBD-baro"};
+    const unsigned char basic[3][2]={{1,0x0c},{1,0x0d},{1,5}};
+    const char *basic_labels[3]={"RPM","speed","coolant"};
+    if(argc<3||strcmp(argv[1],"--host"))return 2;
+    for(arg=3;arg<argc;arg++) {
+        if(!strcmp(argv[arg],"--port")&&arg+1<argc)port=number(argv[++arg],1,65535);
+        else if(!strcmp(argv[arg],"--signals"))signals=1;
+        else return 2;
+    }
+    count=signals?12:3;
+    signal(SIGINT,stop);signal(SIGTERM,stop);signal(SIGPIPE,SIG_IGN);
+    lock=reserve_gateway();
+    if(lock<0){puts("Diagnostics busy: exit gauge apps and close other diagnostic clients.");return 1;}
+    for(i=0;i<count&&running;i++) {
+        const unsigned char *request=signals?requests[i]:basic[i];
+        unsigned size=request[0]==0x22?3:2;
+        unsigned char prefix[3],reply[64];
+        if(fd<0)fd=connect_gw(argv[2],port);
+        if(fd<0){printf("CONNECT FAILED %s:%u: %s\n",argv[2],port,strerror(errno));close(lock);return 1;}
+        if(!i)printf("TCP CONNECTED %s:%u\n",argv[2],port);
+        memcpy(prefix,request,size);prefix[0]=(unsigned char)(request[0]+0x40);
+        n=exchange(fd,0x12,request,size,prefix,size,reply,sizeof reply,700,&negative);
+        printf("READ %s request=",signals?labels[i]:basic_labels[i]);
+        for(j=0;j<size;j++)printf("%02X",request[j]);
+        printf(" result=%d",n);
+        if(n>0){printf(" response=");for(j=0;j<(unsigned)n;j++)printf("%02X",reply[j]);}
+        else if(n==-2)printf(" NRC=%02X",negative);
+        puts("");fflush(stdout);
+        if(signals){close(fd);fd=-1;}
+        else if(n==-1)break;
+        poll(0,0,150);
+    }
+    if(fd>=0)close(fd);
+    close(lock);return 0;
+}
 #elif defined(ENGINE_CODES_ONLY)
 static void fault_codes(int fd, int clear) {
     /* Fault, pending, confirmed, failed since clear, or warning requested.
@@ -189,7 +231,8 @@ int main(int argc, char **argv) {
         return 0;
     }
     gw=connect_gw(host,port);
-    fault_codes(gw,mode==2);
+    if(gw<0) printf("Gateway %s:%u unavailable (%s)\n",host,port,strerror(errno));
+    else fault_codes(gw,mode==2);
     if (gw>=0) close(gw);
     close(lock);
     return 0;
@@ -376,6 +419,17 @@ static int read_did(int fd, unsigned ecu, unsigned did, double *value) {
     return decoded;
 }
 
+#if defined(PERF_LAB) && defined(BD_STOCK_DME)
+static int read_obd(int fd,unsigned pid,double *value) {
+    unsigned char request[]={1,(unsigned char)pid},prefix[]={0x41,(unsigned char)pid},reply[64];
+    unsigned negative;
+    int n=exchange(fd,0x12,request,2,prefix,2,reply,sizeof reply,500,&negative);
+    if(n==-2)return 0;
+    if(n<0)return -1;
+    return bd_decode_obd(pid,reply+2,(size_t)n-2,value);
+}
+#endif
+
 static int send_frame(int sock, struct sockaddr_in *dest, bd_frame *f, uint64_t *observed) {
     char packet[BD_MAX_PACKET];
     uint64_t now = bd_mono_ms();
@@ -419,12 +473,17 @@ int main(int argc, char **argv) {
     uint64_t lease_until=0, retry_at=0;
     int scanned=0;
 #ifdef PERF_LAB
+#ifdef BD_STOCK_DME
+    uint64_t next_oil_temperature=0;
+    int use_obd_rail=0;
+#else
     int ethanol=0;
     uint64_t next_ethanol=0;
 #endif
+#endif
     for (i = 1; i < (unsigned)argc; ++i) {
         if (!strcmp(argv[i], "--demo")) demo = 1;
-#ifdef PERF_LAB
+#if defined(PERF_LAB) && !defined(BD_STOCK_DME)
         else if (!strcmp(argv[i], "--ethanol")) ethanol = 1;
 #endif
         else if (!strcmp(argv[i], "--session")) session = 1;
@@ -456,7 +515,11 @@ int main(int argc, char **argv) {
             f.value[BD_RAIL]=95+22*sin(t); f.value[BD_OIL]=2.5+.5*sin(t);
             f.value[BD_COOLANT]=86+3*sin(t);
 #ifdef PERF_LAB
+#ifdef BD_STOCK_DME
+            f.value[BD_OIL_TEMP]=95;
+#else
             f.value[BD_ETHANOL]=38;
+#endif
 #endif
             f.valid=(1u<<BD_COUNT)-1;
             for (i=0;i<BD_COUNT;++i) observed[i]=bd_mono_ms();
@@ -484,7 +547,16 @@ int main(int argc, char **argv) {
                     if (due[i]<=start) due[i]=start+periods[i];
                 }
                 if (i != 0) f.valid &= ~(1u << (i-1));
+#if defined(PERF_LAB) && defined(BD_STOCK_DME)
+                if(dids[i]==0x4300)rc=read_obd(gw,5,&v);
+                else if(dids[i]==0x56d7&&use_obd_rail)rc=read_obd(gw,0x23,&v);
+                else {
+                    rc=read_did(gw,dids[i]==0xda12?0x18:0x12,dids[i],&v);
+                    if(dids[i]==0x56d7&&rc==0){rc=read_obd(gw,0x23,&v);if(rc>0)use_obd_rail=1;}
+                }
+#else
                 rc = read_did(gw, dids[i] == 0xda12 ? 0x18 : 0x12, dids[i], &v);
+#endif
                 if (rc < 0) {
                     release_gateway(&gw,&lock);
                     if (session) {
@@ -510,6 +582,16 @@ int main(int argc, char **argv) {
                 f.value[i-1]=v; observed[i-1]=bd_mono_ms(); f.valid |= 1u << (i-1);
             }
 #ifdef PERF_LAB
+#ifdef BD_STOCK_DME
+            if(gw>=0&&start>=next_oil_temperature&&running) {
+                double temperature=0;
+                int rc=read_obd(gw,0x5c,&temperature);
+                f.valid&=~(1u<<BD_OIL_TEMP);
+                if(rc>0){f.value[BD_OIL_TEMP]=temperature;observed[BD_OIL_TEMP]=bd_mono_ms();f.valid|=1u<<BD_OIL_TEMP;}
+                next_oil_temperature=bd_mono_ms()+2000;
+                if(rc<0){release_gateway(&gw,&lock);retry_at=bd_mono_ms()+DIAGNOSTIC_RETRY_MS;}
+            }
+#else
             if (gw>=0 && ethanol && start>=next_ethanol && running) {
                 /* Published MHD+ MG1 monitor layout. This is the tune's active
                  * ethanol percentage, distinct from the raw ECA sensor. */
@@ -532,6 +614,7 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+#endif
 #endif
             if (gw>=0) {
                 scanned=1;

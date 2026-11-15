@@ -44,12 +44,21 @@ int bd_decode_did(unsigned did, const unsigned char *p, size_t n, double *out) {
     return 1;
 }
 
+int bd_decode_obd(unsigned pid,const unsigned char *data,size_t len,double *out) {
+    if(!data||!out)return 0;
+    if((pid==5||pid==0x5c)&&len==1){*out=(double)data[0]-40.;return 1;}
+    if(pid==0x23&&len==2){*out=(((unsigned)data[0]<<8)|data[1])*.1;return 1;}
+    return 0;
+}
+
 int bd_encode(const bd_frame *f, char *out, size_t len) {
     int n;
     size_t used;
     unsigned i;
     if (!f || !out || !len) return -1;
-    #ifdef PERF_LAB
+    #if defined(PERF_LAB) && defined(BD_STOCK_DME)
+    const char *version = "NBG5";
+#elif defined(PERF_LAB)
     const char *version = "NBG4";
 #else
     const char *version = "NBG3";
@@ -100,7 +109,10 @@ int bd_parse(const char *data, size_t len, bd_frame *out) {
     memcpy(b, data, len); b[len] = 0;
     memset(&f, 0, sizeof f);
     if (len<5 || !isspace((unsigned char)b[4])) return 0;
-    #ifdef PERF_LAB
+    #if defined(PERF_LAB) && defined(BD_STOCK_DME)
+    if (!memcmp(b,"NBG5",4)) fields=BD_COUNT;
+    else
+#elif defined(PERF_LAB)
     if (!memcmp(b,"NBG4",4)) fields=BD_COUNT;
     else
 #endif
@@ -128,7 +140,9 @@ int bd_parse(const char *data, size_t len, bd_frame *out) {
 int bd_is_fresh(const bd_frame *f, unsigned i, uint64_t elapsed) {
     unsigned limit = i==BD_IAT || i==BD_TRANS || i==BD_COOLANT ? BD_TEMP_STALE_MS
                    : BD_STALE_MS;
-    #ifdef PERF_LAB
+    #if defined(PERF_LAB) && defined(BD_STOCK_DME)
+    if (i == BD_OIL_TEMP) limit = BD_TEMP_STALE_MS;
+#elif defined(PERF_LAB)
     if (i == BD_ETHANOL) limit = 6500;
 #endif
     return i < BD_COUNT && (f->valid & (1u << i)) &&
@@ -136,6 +150,9 @@ int bd_is_fresh(const bd_frame *f, unsigned i, uint64_t elapsed) {
 }
 
 double bd_display_value(unsigned i, double x, int metric) {
+#if defined(PERF_LAB) && defined(BD_STOCK_DME)
+    if(i==BD_OIL_TEMP&&!metric)return x*1.8+32;
+#endif
     if (i == BD_BOOST && metric) return x / 14.5037738;
     if ((i == BD_IAT || i == BD_TRANS || i == BD_COOLANT) && !metric) return x * 1.8 + 32;
     if ((i == BD_RAIL || i == BD_OIL) && !metric) return x * 14.5037738;
@@ -145,7 +162,7 @@ const char *bd_unit(unsigned i, int metric) {
     if (i == BD_BOOST || i == BD_RAIL || i == BD_OIL) return metric ? "bar" : "psi";
     if (i == BD_AFR) return "AFR (gas eq.)";
     if (i == BD_TIMING) return "deg BTDC (cyl 1)";
-#ifdef PERF_LAB
+#if defined(PERF_LAB) && !defined(BD_STOCK_DME)
     if (i == BD_ETHANOL) return "%";
 #endif
     return metric ? "C" : "F";
@@ -155,7 +172,9 @@ int bd_bar(unsigned i, double x) {
     static const double hi[BD_COUNT] = {45, 25, 50, 100, 160, 300, 8, 130};
     double y;
     if (i >= BD_COUNT || !isfinite(x)) return 0;
-#ifdef PERF_LAB
+#if defined(PERF_LAB) && defined(BD_STOCK_DME)
+    if(i==BD_OIL_TEMP)return x<=0?0:x>=150?1000:(int)(x*1000./150.+.5);
+#elif defined(PERF_LAB)
     if (i == BD_ETHANOL) return x < 0 ? 0 : x >= 100 ? 1000 : (int)(x * 10 + .5);
 #endif
     y = (x - lo[i]) * 1000 / (hi[i] - lo[i]);
