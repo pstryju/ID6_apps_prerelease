@@ -1,5 +1,8 @@
 #include "plugin_factory.h"
 #include "diagnostic_worker.h"
+#ifdef XDRIVE_ONLY
+#include "gateway_config.h"
+#endif
 #include <stdio.h>
 #include <sys/wait.h>
 
@@ -76,7 +79,15 @@ class MhdMaps : public bmw::PluginApp {
         resultModel_=49u+Function;
 #endif
 #endif
+#ifdef XDRIVE_ONLY
+        char gateway[16];
+        if(!bd_load_gateway(kMapWorker,gateway)){
+            close(channel[0]);close(channel[1]);status("Invalid gateway configuration");return true;
+        }
+        const char* args[]={kMapWorker,"--host",gateway,mode,argument,0};
+#else
         const char* args[]={kMapWorker,"--host","169.254.21.3",mode,argument,0};
+#endif
         if (fcntl(channel[0],F_SETFL,O_NONBLOCK)>=0 &&
             fcntl(channel[0],F_SETFD,FD_CLOEXEC)>=0 && fcntl(channel[1],F_SETFD,FD_CLOEXEC)>=0)
             child_=launch(args,channel[1]);
