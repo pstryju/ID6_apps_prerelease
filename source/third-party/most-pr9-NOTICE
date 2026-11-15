@@ -1,0 +1,11 @@
+MOST diagnostic tunnel source attribution
+
+Adapted from 0x424D57's PR #9 to inotbarnacle/ID6_apps_prerelease.
+Pinned head: e05b5d334e19eb78ebf1163d7f55e7968db1c572.
+https://github.com/inotbarnacle/ID6_apps_prerelease/pull/9
+
+Imported files: native/src/most/*; native/tests/test_most.c,
+fake_dsi.[ch], fake_dme.[ch]. Copyright ID6 Apps contributors.
+MIT license: ../LICENSE. Local additions and changes are documented separately.
+
+The upstream PR is not a runtime compatibility guarantee for this firmware.

@@ -1,0 +1,15 @@
+{
+  "transport": "MOST via DSYSMOSTServer, FBlock 06 instance F0 routine 0F0B",
+  "conditions": "Owner parked, engine idling, HMI home, ENET cable attached for SSH. No unplugged sleep/wake test yet.",
+  "readings": [
+    {"request": "224201", "response": "6242016289", "value": 98.53515625, "unit": "kPa absolute"},
+    {"request": "224205", "response": "624205314D", "value": 98.6015625, "unit": "kPa absolute"},
+    {"request": "225889", "response": "6258891017", "value": 1.00563057908, "unit": "lambda candidate"},
+    {"request": "224A49", "response": "624A49FFEC", "value": -2.0, "unit": "degrees candidate"},
+    {"request": "22580F", "response": "62580F6C", "value": 33.0, "unit": "C candidate"},
+    {"request": "22586F", "response": "62586F09D5", "value": 2.517, "unit": "bar candidate"},
+    {"request": "2256D7", "response": "7F2231", "value": null, "unit": "unsupported"},
+    {"request": "0123", "response": "41230402", "value": 102.6, "unit": "bar"}
+  ],
+  "limitations": "Single idle capture. Transport and raw replies proven; calibration under load and independent validation of candidate DIDs remain open. No EGS read or ECU write performed."
+}
