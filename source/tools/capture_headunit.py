@@ -14,6 +14,7 @@ FIRMWARE = re.compile(r"\bNBTevo_([A-Z][0-9]{5}[A-Z])\b", re.I)
 DISPLAY = re.compile(rb"resolution:\s*x\s*=\s*([0-9]{2,4}),\s*y\s*=\s*([0-9]{2,4})\b", re.I)
 FRAMEWORKS = ("libAppFramework.A.so", "libCoreFramework.A.so")
 FRAMEWORK_DIR = "/opt/hmi/ID5/lib"
+RUNTIME_LIBRARIES = ("libc.so.3", "libm.so.2", "libsocket.so.3", "libstdc++.so.6")
 LEGACY = (
     "HostKeyAlgorithms=+ssh-rsa",
     "KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1",
@@ -88,12 +89,34 @@ def capture(read, entered):
     return report, frameworks
 
 
+def capture_runtime(read):
+    """Read only named runtime dependencies, never an entire filesystem."""
+    files, report = {}, {}
+    for name in RUNTIME_LIBRARIES:
+        for directory in ("/lib", "/usr/lib", "/boot/lib", "/proc/boot"):
+            path = directory + "/" + name
+            data = read("cat " + path, optional=True)
+            if not data:
+                continue
+            if (len(data) < 20 or data[:6] != b"\x7fELF\x01\x01" or
+                    struct.unpack_from("<HH", data, 16) != (3, 40)):
+                raise ValueError(f"{path} is not a little-endian ARM ELF32 shared object")
+            files[name] = data
+            report[name] = {"source_path": path, "size_bytes": len(data),
+                            "sha256": hashlib.sha256(data).hexdigest()}
+            break
+        else:
+            report[name] = {"missing": True}
+    return report, files
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head", required=True, type=enet_ip, help="head unit SSH IP")
     parser.add_argument("--firmware", help="exact NBTevo code shown in iDrive if needed")
     parser.add_argument("--out", required=True, type=Path, help="new private output directory")
     parser.add_argument("--include-frameworks", action="store_true", help="also save both framework binaries for private ABI comparison")
+    parser.add_argument("--include-runtime", action="store_true", help="also read four named system libraries for private dependency checks")
     parser.add_argument("--legacy", action="store_true", help="allow legacy SSH algorithms for this ENET connection only")
     args = parser.parse_args()
     try:
@@ -102,11 +125,18 @@ def main():
         def read(command, optional=False):
             return ssh_read(args.head, args.legacy, command, optional)
         report, frameworks = capture(read, args.firmware)
+        runtime = {}
+        if args.include_runtime:
+            report["runtime"], runtime = capture_runtime(read)
         args.out.mkdir(mode=0o700)
         (args.out / "compatibility.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         if args.include_frameworks:
             for name, data in frameworks.items():
                 (args.out / name).write_bytes(data)
+        if runtime:
+            (args.out / "runtime").mkdir(mode=0o700)
+            for name, data in runtime.items():
+                (args.out / "runtime" / name).write_bytes(data)
         print(f"Saved local compatibility evidence to {args.out}")
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         raise SystemExit(str(error)) from None
