@@ -1,5 +1,7 @@
 # NBT Evo ID6 apps
 
+**Komendy dla naszego portu Evo Y:** [KOMENDY.md](KOMENDY.md) — instalacja, przywracanie poprzedniej wersji, build, testy i diagnostyka. Ta ściąga opisuje bieżące skrypty forka; poniższy opis zawiera również funkcje pakietów upstream.
+
 For manual testing on the local NBTevo_Y24073J port, use [Install-Evo.cmd](Install-Evo.cmd) and [Uninstall-Evo.cmd](Uninstall-Evo.cmd). See the [manual testing guide (Polish)](TESTY-W-AUCIE.md). These scripts do not restart iDrive automatically.
 
 Connect your parked car to a computer over wired ENET. Open an AI agent with terminal access on that computer and give it this repository and [AgentReadMe.md](AgentReadMe.md). The agent identifies your head unit, checks compatibility, and installs your chosen apps under **My Vehicle**.
