@@ -7,7 +7,36 @@ only after a factory-navigation cycle. Navigation briefly appeared then the
 canvas became blank; one fast navigation/OFF/ON sequence coincided with a full
 HU restart. The exact cause of the restart is not established.
 
-### Current repair candidate: RPM only
+### Current graphical candidate: RPM line
+
+The latest renderer draws a thin baseline and a thick active segment, 0–8000
+RPM from CDS, instead of numeric RPM text. It uses the packaged reference
+renderer’s image buffers 5/6, drawing to the inactive image and switching only
+after geometry/style calls have been acknowledged. The previous navigation
+and OFF/ON repairs remain in place. The numeric textarea is cleared on the
+first graphic frame. There is no boost, new instance creation or autoactivation.
+
+The reference ELF `.local/hud-reference/hud-shape-qnx` contains draw() at
+0x1047c8 selecting image 5/6 and SwitchVisibility at 0x104eec; its tachBand()
+uses x=0..116. The candidate straight line uses that width at y=30, inside
+the reference band footprint. Line widths are 1/5; palette role 4 is a candidate
+foreground, not a guaranteed physical colour on this windshield. Geometry,
+placement, readability and cold-start availability need a parked target check.
+
+Each batch is complete and bounded (at most nine calls), with one call in
+flight. No animation frames queue up: the renderer waits for the current batch,
+then draws the latest RPM, aiming at 100 ms between starts subject to terminal
+latency. Navigation cancels unsent drawing/swap calls. Stop removes items only
+from image buffers 5/6 and clears text when guidance is fresh/idle; shared frame
+1 is never hidden. A terminal error stops output rather than force-resetting.
+
+For the next parked test, install only HudTest and check a short thick segment
+at idle, growth with RPM, navigation takeover/return and OFF/ON. If graphics
+fail, report the app status and restore the previous deployment. Host tests
+cover endpoints, monotonic scaling, wire shapes, buffer ordering, ACK pacing,
+cleanup scope and navigation preemption. They do not verify the physical HUD.
+
+### Previous repair candidate: RPM only
 
 The new candidate keeps only the proven text handle 2 and shared frame 1 at
 unique terminal 82/00, node 0101. It no longer writes boost text handles 3/4,

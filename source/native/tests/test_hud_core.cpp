@@ -1,14 +1,46 @@
 #include "cluster/hud_terminal.hpp"
 #include "hud_feed.h"
 #include "hud_lifecycle.h"
+#include "hud_rpm_graph.h"
 #include <assert.h>
 #include <stdio.h>
 using namespace nbt;
-static hudterm::Config config(){hudterm::Config c;c.handles.allow(1);c.handles.allow(2);c.handles.allow(3);c.handles.allow(4);c.navFrame=1;return c;}
+static hudterm::Config config(){hudterm::Config c;for(int i=1;i<=6;++i)c.handles.allow(i);c.navFrame=1;return c;}
 static most::View view(uint16_t src,uint16_t dst,uint16_t fkt,uint8_t op,const std::vector<uint8_t>& p){
     most::View v;memset(&v,0,sizeof v);v.varTag=2;v.src=src;v.dst=dst;v.fblock=0x82;v.inst=0;v.fkt=fkt;v.op=op;v.data=p.empty()?0:&p[0];v.len=p.size();return v;
 }
 int main(){
+    assert(evo_hud::rpmWidth(-1)==0&&evo_hud::rpmWidth(0)==0);
+    assert(evo_hud::rpmWidth(4000)==58&&evo_hud::rpmWidth(8000)==116&&evo_hud::rpmWidth(10000)==116);
+    int previous=0;for(int rpm=0;rpm<=10000;++rpm){int width=evo_hud::rpmWidth(rpm);assert(width>=previous&&width<=116);previous=width;}
+    hudterm::Config graphics=config();graphics.maxInFlight=1;
+    for(unsigned front=5;front<=6;++front){
+        unsigned back=front==5?6:5;hudterm::Batch graph=evo_hud::rpmGraph(4000,front,true);
+        assert(graph.calls.size()<=graphics.maxBatch);bool swapped=false,fill=false;
+        for(size_t i=0;i<graph.calls.size();++i){
+            const hudterm::Call& c=graph.calls[i];assert(hudterm::callOk(c,graphics.handles));
+            assert(c.handle()==back||c.handle()==1||c.handle()==2||(c.fkt==hudterm::kSwitchVisibility&&c.handle()==front));
+            if(c.fkt==hudterm::kAddPolygon){
+                assert(!swapped&&c.payload[5]==2);
+                assert(hudterm::rdBe16(&c.payload[12])==30);
+                if(hudterm::rdBe16(&c.payload[2])==1){assert(hudterm::rdBe16(&c.payload[10])==58);fill=true;}
+            }
+            if(c.fkt==hudterm::kSwitchVisibility){assert(fill);assert(c.handle()==front&&hudterm::rdBe16(&c.payload[2])==back);swapped=true;}
+            if(c.fkt==hudterm::kSetVisibility)assert(c.handle()==1&&c.payload[2]==1);
+        }
+        assert(swapped&&fill);
+        hudterm::Core renderer(graphics);renderer.setLink(true,0x2001,1);renderer.setHost(0x0101,1);
+        assert(renderer.submit(graph,2)==hudterm::kQueued);most::Msg packet;unsigned calls=0;
+        while(renderer.next(3+calls,packet)){
+            most::Msg blocked;assert(!renderer.next(3+calls,blocked)); // wait for each acknowledgment
+            most::View ack=view(0x0101,0x2001,packet.fkt,0x0d,packet.data);renderer.onMessage(ack,4+calls);++calls;
+        }
+        assert(calls==graph.calls.size()&&!renderer.busy());
+        hudterm::Batch cleanup=evo_hud::clearRpm();
+        for(size_t i=0;i<cleanup.calls.size();++i){assert(hudterm::callOk(cleanup.calls[i],graphics.handles));assert(cleanup.calls[i].fkt!=hudterm::kSetVisibility&&cleanup.calls[i].fkt!=hudterm::kSwitchVisibility);}
+        assert(renderer.submit(graph,100)==hudterm::kQueued);assert(renderer.next(100,packet));
+        renderer.setExternalIdle(false,101);assert(!renderer.next(101,packet)&&!renderer.busy());
+    }
     HudLifecycle life;
     life.request(true);assert(life.canRun());
     life.request(false);life.reaped(true);assert(!life.canRun());
