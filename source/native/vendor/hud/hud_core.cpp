@@ -46,7 +46,7 @@ const char* submitResultName(SubmitResult r) {
 // ---- Core ----------------------------------------------------------------------------------------------------------
 
 Core::Core(const Config& cfg)
-    : cfg_(cfg), linkUp_(false), self_(0), host_(0), failed_(false), navActive_(false), routeOn_(false),
+    : cfg_(cfg), linkUp_(false), self_(0), host_(0), failed_(false), navActive_(false), routeOn_(false), externalIdle_(true),
       frameOff_(false),
       lastNavMs_(0), status_(kOffline), changed_(false), haveCurrent_(false),
       nextCall_(0), batchStartMs_(0), recent_(cfg.replyMs), tag_(1), epoch_(0) {
@@ -85,7 +85,7 @@ bool Core::takeDropped(uint16_t fkt, bool byHandle, uint16_t handle, uint32_t no
 
 void Core::refresh(const char* why, uint32_t now) {
     Status s = (!linkUp_ || !self_ || !host_) ? kOffline : failed_ ? kFailed
-             : navActive_ ? kNavActive : kReady;
+             : navActive_ || !externalIdle_ ? kNavActive : kReady;
     if (s == status_) return;
     printf("[HudTerm] %s -> %s (%s)\n", statusName(status_), statusName(s), why);
     if (status_ == kReady) ++epoch_;          // what we drew may be gone or overdrawn: the driver redraws
@@ -146,6 +146,12 @@ void Core::reset(uint32_t now) {
     if (!failed_) return;
     failed_ = false;
     refresh("reset", now);
+}
+
+void Core::setExternalIdle(bool idle,uint32_t now) {
+    if(externalIdle_==idle)return;
+    externalIdle_=idle;
+    refresh(idle?"external guidance idle":"external guidance active or unknown",now);
 }
 
 SubmitResult Core::submit(const Batch& b, uint32_t) {

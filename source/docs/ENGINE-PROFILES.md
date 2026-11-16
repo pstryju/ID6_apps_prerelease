@@ -12,16 +12,15 @@ Gauge mapping is separate from transport and UI:
   transport, scheduling, ambient freshness and publication.
 
 These are source data tables. Editing mappings requires rebuilding the workers,
-but changing the selected existing profile does not. BoostDeck and HUD share
-the same table. CDS readings and Evo units are independent of the engine map.
+but changing the selected existing profile does not. BoostDeck uses
+the N20 table. CDS readings and Evo units are independent of the engine map.
 Keep the two builds' internal wire units unchanged: boost psi, rail/oil bar,
 IAT C, gasoline-equivalent AFR. The UI converts for display.
 
 ## Selection
 
 `Install-Evo.cmd -EngineProfile n20` preserves the current car's mapping and is
-the default. The installer adds a checksummed `engine-profile.txt` to BoostDeck
-and/or HudTest and records the choice in the deployment receipt. The worker
+the default. The installer adds a checksummed `engine-profile.txt` to BoostDeck and records the choice in the deployment receipt. The worker
 reads this file beside its own executable; a missing file preserves legacy N20
 behavior. Invalid/unreadable settings fail rather than falling back silently.
 An explicit worker `--profile` argument overrides the file for testing.

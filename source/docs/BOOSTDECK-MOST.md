@@ -103,6 +103,6 @@ The integrated plugin still needs its owner runtime and cable-free wake tests.
 # Engine mapping selection
 
 The N20 query/decoder table now lives in `native/src/profiles/n20.inc` and is
-shared with HUD boost. The installer keeps explicit `n20` by default;
+used by BoostDeck; the HUD repair candidate is CDS RPM-only. The installer keeps explicit `n20` by default;
 experimental `auto` and the unfilled B48/N13 entries are described in
 [ENGINE-PROFILES.md](ENGINE-PROFILES.md).

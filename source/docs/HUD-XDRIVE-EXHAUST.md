@@ -1,58 +1,64 @@
-# Optional apps for the owner's Evo Y / F30 328i xDrive N20
-
-Status: prepared and tested offline. The owner confirms factory windshield HUD
-and a factory exhaust flap. Neither optional app has been loaded on this car.
-No vehicle connection, ECU operation or installation was made during this work.
+# Optional apps for Evo Y
 
 ## HUD Gauges (HudTest, connector 107)
 
-The original archive's renderer accepts only the old 169.254.21.3 gateway and
-uses the old diagnostic path. That known limitation was not shipped as a Y port.
-The candidate rebuilds the plugin against the copied Y frameworks and uses a
-new display adapter with the existing HUDTerminal protocol/core.
+Owner feedback confirmed that the first HUD PoC renders RPM. Boost appeared
+only after a factory-navigation cycle. Navigation briefly appeared then the
+canvas became blank; one fast navigation/OFF/ON sequence coincided with a full
+HU restart. The exact cause of the restart is not established.
 
-This first candidate displays text RPM and boost in bar, rather than the old
-curved tachometer graphic. RPM comes from native CDS; a dedicated MOST producer
-reads only DME 224201/224205 for gauge boost. No external diagnostic gateway is
-used. The UI menu can be left while enabled. The checkbox starts OFF after an
-iDrive restart; automatic boot persistence is deliberately not included before
-this car's HUD profile is verified.
+### Current repair candidate: RPM only
 
-The packaged windshield profile's instance handles 1..6 and unique HUDTerminal
-82/00 at node 0101 are retained, not the neighbouring project's 6WA display
-profile. The reference binary's setup enables these handles and nav frame 1.
-The new minimal view uses text instances 2/3/4 and frame 1; their exact physical
-placement and text clipping on this car remain unverified. It sends no instance
-creation, MOST communication disable, HUD coding or cluster firmware change.
+The new candidate keeps only the proven text handle 2 and shared frame 1 at
+unique terminal 82/00, node 0101. It no longer writes boost text handles 3/4,
+listens for boost UDP or launches/packages a diagnostic boost producer.
+RPM and guidance status come from CDS. No engine profile is needed for HUD.
+The existing terminal core and new DSI adapter remain; licenses are retained.
 
-The renderer waits for client registration, a unique supported registry host,
-target-up, fresh CDS RPM, and a CDS navigation status indicating idle. Unknown
-navigation status blocks drawing. A raw MOST observer also feeds the terminal
-core so factory-navigation activity wins over the overlay, including copies of
-the terminal's replies. It pauses on wrong host, duplicate host, timeout, error
-or stale input. Turning it off clears its texts/frame when the terminal is
-available and not owned by navigation, then unregisters the DSI client.
+A code defect matched the navigation disappearance: a non-idle CDS state made
+the renderer call clear, which hid frame 1 while the MOST navigation observer
+could still report ready. The repair adds an independent CDS gate inside the
+terminal core: guidance active/unknown drops queued calls without clearing,
+hiding or drawing. Raw MOST navigation still has priority even if CDS briefly
+reports idle. Missing/stale guidance blocks output. On return, redraw starts
+with a fresh batch, not an old queued visibility request.
 
-HUD and BoostDeck have separate DSI names and share the existing per-request
-diagnostic lease. Simultaneous HUD and BoostDeck clients still need a car test.
-The HUD producer omits AFR/timing/rail/oil scans to reduce bus traffic.
+Normal stop clears only our RPM text when the terminal is ready and the last
+CDS guidance sample is fresh/idle. It never hides the shared factory frame.
+Failed terminal state is not forcibly reset to send cleanup. Only one request
+is in flight. Quick OFF/ON stops feeding the old renderer and waits until that
+process is reaped before launching/feeding its replacement. Repeated identical
+checkbox events do not resubscribe CDS.
+
+Boost's dependence on a navigation cycle suggests uninitialized/invisible
+terminal text instances; it does not establish a failed diagnostic read. That
+initialization hypothesis is not proven without target traffic/instance evidence.
+The new RPM-only candidate avoids those unverified instances altogether.
+
+The checkbox still starts OFF after HU sleep/restart. Autoactivation is not
+implemented. A graphical RPM sweep/shift lights is the intended next feature,
+not part of this stability repair; no guessed image instance or instance creation
+has been added.
+
+### Build and parked regression check
+
+Build/check with the existing dashboard scripts, then install only this app:
 
 ```powershell
 .\Install-Evo.cmd -Apps HudTest
 ```
 
-After manual iDrive restart, open My Vehicle / HUD Gauges and enable Show HUD
-gauges while parked. Check text placement, fresh RPM, idle boost, disabling,
-factory-navigation priority and sleep/wake with no OBD. The menu status reports
-missing/unsupported terminal, missing CDS/navigation state, active HUD, nav yield
-or terminal failure. If the overlay fails, switch it off and restore the previous
-deployment. An absent boost reply stays `--`; idle near zero is expected.
+After manual iDrive restart, check initial RPM without starting navigation,
+navigation start while RPM is visible, continued factory guidance, route stop
+and automatic RPM return. Then check OFF/ON with navigation idle and active,
+and sleep/wake. Unknown or active guidance must never trigger cleanup commands.
+The repair passes host tests and requires a new parked target check; it does not
+prove that the reported full HU restart cannot recur.
 
-HudTest's seven local files include two workers and the source/notice licenses.
-The terminal core/protocol are PolyForm Noncommercial 1.0.0 from NBT-AAD;
-third-party/hud-NOTICE.txt records the derivation. No proprietary libraries
-are distributed with it. The new adapter uses the same base DSI API exercised
-by the earlier MOST DME probe, with a separate 82/00 target.
+The staged HudTest has six files: manifest, XML, plugin library, one renderer
+worker, LICENSE.txt and NOTICE.txt. Installation replaces the app folder, removing
+the old boost worker/config. Rollback remains receipt-based. No runtime vehicle
+control command, coding or terminal-instance creation is introduced.
 
 ## xDrive Control (connector 112)
 

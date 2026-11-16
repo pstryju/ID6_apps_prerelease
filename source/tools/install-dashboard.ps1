@@ -57,7 +57,7 @@ foreach ($app in $Apps) {
         $expectedNames += @("${app}_ALL_Images.zip")
         if($app -in @('BoostDeck','EngineCodes')){$expectedNames += $worker}
     }
-    if($app -eq 'HudTest'){$expectedNames+=@('hud-display-qnx','hud-boost-most-qnx','LICENSE.txt','NOTICE.txt')}
+    if($app -eq 'HudTest'){$expectedNames+=@('hud-display-qnx','LICENSE.txt','NOTICE.txt')}
     if($app -eq 'XDriveControl'){$expectedNames+=@('xdrive-control-qnx','LICENSE.txt')}
     if (@(Compare-Object @($files | ForEach-Object { $_.name }) $expectedNames).Count) { throw "Incomplete or unexpected candidate files: $app" }
     $items += @{ name=$app; connector=$connector; files=$files; hadOriginal=$false }
@@ -69,7 +69,7 @@ if (-not [Net.IPAddress]::TryParse($Gateway,[ref]$gatewayAddress) -or $gatewayAd
 $Gateway=$gatewayAddress.ToString()
 Write-Host "Apps: $($Apps -join ', '). Two SSH sessions; no automatic restart."
 if('EngineCodes' -in $Apps -or 'XDriveControl' -in $Apps){Write-Host "Diagnostic gateway: $Gateway"}
-if('BoostDeck' -in $Apps -or 'HudTest' -in $Apps){Write-Host "Engine profile: $EngineProfile (B48/N13 mappings await validation)"}
+if('BoostDeck' -in $Apps){Write-Host "Engine profile: $EngineProfile (B48/N13 mappings await validation)"}
 if (-not $PSCmdlet.ShouldProcess($Head, "Install $($Apps -join ', ') using one verified bundle")) { return }
 if (-not $Parked -and (Read-Host 'Auto stoi, iDrive jest wlaczone? Wpisz TAK, aby kontynuowac') -cne 'TAK') { throw 'Installation cancelled.' }
 Write-EvoStatus '[2/5] Jeden odczyt konfiguracji i zainstalowanych aplikacji'
@@ -104,7 +104,7 @@ foreach ($item in $items) {
         $item.files+=@{name='gateway-ip.txt';sha256=(Get-BytesHash $bytes)}
         $entries+=@{name="stage/$($item.name)/gateway-ip.txt";bytes=$bytes}
     }
-    if ($item.name -in @('BoostDeck','HudTest')) {
+    if ($item.name -eq 'BoostDeck') {
         $bytes=[Text.Encoding]::ASCII.GetBytes($EngineProfile+"`n")
         $item.files+=@{name='engine-profile.txt';sha256=(Get-BytesHash $bytes)}
         $entries+=@{name="stage/$($item.name)/engine-profile.txt";bytes=$bytes}

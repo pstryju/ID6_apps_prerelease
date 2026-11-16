@@ -63,14 +63,12 @@ void pump(){
         pthread_mutex_lock(&lock);core->sendFailed((uint32_t)bd_mono_ms());pthread_mutex_unlock(&lock);
     }
 }
-void clear(bool explicit_stop=false){
+void clear(){
     pthread_mutex_lock(&lock);
-    if(explicit_stop&&core->status()==hudterm::kFailed)core->reset((uint32_t)bd_mono_ms());
     if(core->status()==hudterm::kReady){
         hudterm::Batch b("clear HUD gauges",true,hudterm::kSlotAll);
-        b.add(hudterm::kSetVisibility,hudterm::setVisibility(1,false));
-        b.add(hudterm::kTextareaSetText,hudterm::setText(2,""));b.add(hudterm::kTextareaSetText,hudterm::setText(3,""));
-        b.add(hudterm::kTextareaSetText,hudterm::setText(4,""));
+        // Never hide frame 1: factory navigation uses the same canvas.
+        b.add(hudterm::kTextareaSetText,hudterm::setText(2,""));
         core->submit(b,(uint32_t)bd_mono_ms());
     }
     pthread_mutex_unlock(&lock);
@@ -80,33 +78,29 @@ int main(int argc,char** argv){
     if(argc!=2||strcmp(argv[1],"--session"))return 2;
     pid_t parent=getppid();if(parent<=1)return 2;
     signal(SIGINT,stop);signal(SIGTERM,stop);signal(SIGPIPE,SIG_IGN);signal(SIGALRM,SIG_DFL);
-    hudterm::Config cfg;for(int i=1;i<=6;++i)cfg.handles.allow(i);cfg.navFrame=1;cfg.maxBatch=12;cfg.maxInFlight=3;
-    core=new hudterm::Core(cfg);
-    int feed_fd=listener(HUD_FEED_PORT),boost_fd=listener(HUD_BOOST_PORT);
-    if(feed_fd<0||boost_fd<0||most_dsi_bind()!=0)return 1;
+    hudterm::Config cfg;cfg.handles.allow(1);cfg.handles.allow(2);cfg.navFrame=1;cfg.maxBatch=12;cfg.maxInFlight=1;
+    core=new hudterm::Core(cfg);core->setExternalIdle(false,(uint32_t)bd_mono_ms());
+    int feed_fd=listener(HUD_FEED_PORT);
+    if(feed_fd<0||most_dsi_bind()!=0)return 1;
     dsi_client_set_name("hud_gauges");dsi_client_set_target(0x8200,0x82,0);
     pthread_t thread;alarm(15);if(pthread_create(&thread,0,dsiThread,0)!=0)return 1;
-    hud_feed feed;memset(&feed,0,sizeof feed);bd_frame boost;memset(&boost,0,sizeof boost);
-    uint64_t boost_received=0,next_frame=0,next_status=0;bool drawn=false;
+    hud_feed feed;memset(&feed,0,sizeof feed);
+    uint64_t next_frame=0,next_status=0;bool drawn=false;
     unsigned last_epoch=0;
     while(running&&getppid()==parent){
         alarm(15);uint64_t now=bd_mono_ms();
         pthread_mutex_lock(&lock);bool exited=dsi_exited;pthread_mutex_unlock(&lock);
         if(exited)break;
         for(unsigned i=0;i<8;++i){hud_feed next;ssize_t n=recv(feed_fd,&next,sizeof next,0);if(n<=0)break;if(n==sizeof next&&hud_feed_valid(next,now))feed=next;}
-        for(unsigned i=0;i<8;++i){char p[BD_MAX_PACKET];ssize_t n=recv(boost_fd,p,sizeof p,0);if(n<=0)break;bd_frame next;
-            if(bd_parse(p,(size_t)n,&next)&&next.sent_ms&&next.sent_ms<=now&&next.sent_ms>=boost_received){boost=next;boost_received=next.sent_ms;}}
         bool data_ok=hud_feed_valid(feed,now)&&feed.nav_idle&&feed.rpm>=0;
-        pthread_mutex_lock(&lock);hudterm::Status state=core->status();unsigned epoch=core->epoch();pthread_mutex_unlock(&lock);
+        pthread_mutex_lock(&lock);core->setExternalIdle(hud_feed_valid(feed,now)&&feed.nav_idle,(uint32_t)now);hudterm::Status state=core->status();unsigned epoch=core->epoch();pthread_mutex_unlock(&lock);
         if(epoch!=last_epoch){drawn=false;last_epoch=epoch;}
         if(!data_ok&&drawn){clear();drawn=false;}
         if(data_ok&&state==hudterm::kReady&&now>=next_frame){
-            char rpm[32],pressure[32];snprintf(rpm,sizeof rpm,"%d RPM",feed.rpm);
-            bool valid=boost_received&&bd_is_fresh(&boost,BD_BOOST,now-boost_received);
-            if(valid)snprintf(pressure,sizeof pressure,"%.2f",boost.value[BD_BOOST]/14.5037738);else strcpy(pressure,"--");
-            hudterm::Batch b("HUD RPM and boost",true);
-            b.add(hudterm::kTextareaSetText,hudterm::setText(2,rpm));b.add(hudterm::kTextareaSetText,hudterm::setText(3,pressure));
-            b.add(hudterm::kTextareaSetText,hudterm::setText(4,"bar"));b.add(hudterm::kSetVisibility,hudterm::setVisibility(1,true));
+            char rpm[32];snprintf(rpm,sizeof rpm,"%d RPM",feed.rpm);
+            hudterm::Batch b("HUD RPM",true);
+            b.add(hudterm::kTextareaSetText,hudterm::setText(2,rpm));
+            if(!drawn)b.add(hudterm::kSetVisibility,hudterm::setVisibility(1,true));
             pthread_mutex_lock(&lock);core->submit(b,(uint32_t)now);pthread_mutex_unlock(&lock);drawn=true;next_frame=now+250;
         }
         pump();
@@ -119,7 +113,9 @@ int main(int argc,char** argv){
         }
         poll(0,0,20);
     }
-    alarm(15);clear(true);uint64_t until=bd_mono_ms()+1000;while(bd_mono_ms()<until){pump();poll(0,0,20);}
+    alarm(15);
+    pthread_mutex_lock(&lock);core->setExternalIdle(hud_feed_valid(feed,bd_mono_ms())&&feed.nav_idle,(uint32_t)bd_mono_ms());pthread_mutex_unlock(&lock);
+    clear();uint64_t until=bd_mono_ms()+1000;while(bd_mono_ms()<until){pump();poll(0,0,20);}
     dsi_unregister_target();dsi_unregister_client();dsi_client_stop();pthread_join(thread,0);
-    close(feed_fd);close(boost_fd);alarm(0);return 0;
+    close(feed_fd);alarm(0);return 0;
 }

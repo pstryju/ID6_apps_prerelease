@@ -3,7 +3,7 @@ Required Notice: Copyright (c) 2026 nanaisu - NBT-AAD (https://github.com/Sq00ky
 HUD protocol and terminal core adapted from milestone-7/src/cluster/hudterm.hpp,
 hud_terminal.hpp/.cpp and src/most/{ids,msg,registry}.hpp in the local authorized
 Supra-iDrive6-Android-Auto source copy. The runtime Client/HudTerminal wrapper
-was omitted; the retained Core uses a new DSI adapter, CDS feed and MOST boost.
+was omitted; the retained Core uses a new DSI adapter and CDS RPM/guidance feed.
 
 These portions are under PolyForm Noncommercial 1.0.0, see hud-LICENSE.md.
 The HUD adapter and profile still require parked validation on this vehicle.

@@ -36,7 +36,7 @@ build/engine-codes: $(WORKER) | build
 build/xdrive-control: $(WORKER) src/controls.c | build
 	$(HOST_LINK) -DXDRIVE_ONLY $(filter %.c,$(filter-out src/controls.c,$^)) -lm -o $@
 
-build/test-hud-core: tests/test_hud_core.cpp vendor/hud/hud_core.cpp $(wildcard vendor/hud/cluster/*.hpp vendor/hud/most/*.hpp) src/hud_feed.h | build
+build/test-hud-core: tests/test_hud_core.cpp vendor/hud/hud_core.cpp $(wildcard vendor/hud/cluster/*.hpp vendor/hud/most/*.hpp) src/hud_feed.h src/hud_lifecycle.h | build
 	$(CXX) -O2 -std=c++98 -Wall -Wextra -Werror -Isrc -Ivendor/hud tests/test_hud_core.cpp vendor/hud/hud_core.cpp -pthread -o $@
 
 build/diagnostic-probe: $(WORKER) src/controls.c | build

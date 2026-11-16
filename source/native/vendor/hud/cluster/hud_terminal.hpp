@@ -14,7 +14,7 @@
 // Status:
 //   kOffline    no MOST link, no registered address, or no host of 82/00 in the registry
 //   kReady      batches are sent
-//   kNavActive  the factory navigation is using the terminal: nothing is sent, and queued work is dropped
+//   kNavActive  factory navigation or an external guidance gate blocks output: nothing is sent, queued work is dropped
 //   kFailed     a call got no answer within the reply timeout, or an error answer: nothing is sent until reset(), the
 //               link comes back, or the host changes
 // Leaving kReady drops the batch in progress and the one queued, so on the way back to kReady the driver redraws its
@@ -109,6 +109,9 @@ public:
     void setLink(bool up, uint16_t self, uint32_t now);
     void setHost(uint16_t host, uint32_t now);
     void onMessage(const most::View& m, uint32_t now);
+    // Independent guidance signal: false drops queued work without drawing
+    // or hiding the shared factory frame. Raw MOST navigation still wins.
+    void setExternalIdle(bool idle, uint32_t now);
     void tick(uint32_t now);                  // timeouts and the end of the navigation's route
     void reset(uint32_t now);                 // leave kFailed
 
@@ -145,7 +148,7 @@ private:
     Config cfg_;
     bool linkUp_;
     uint16_t self_, host_;
-    bool failed_, navActive_, routeOn_;
+    bool failed_, navActive_, routeOn_, externalIdle_;
     bool frameOff_;          // the navigation switched its frame off: only frame-on draws again until the release
     uint32_t lastNavMs_;
     Status status_;

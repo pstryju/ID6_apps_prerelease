@@ -65,7 +65,8 @@ foreach ($pair in @(@('EngineCodes','engine-codes-qnx'),@('BoostDeck','boostdeck
     }
     Copy-Item -LiteralPath $worker -Destination (Join-Path $stage $pair[0])
 }
-Copy-Item -LiteralPath (Join-Path $output 'hud-boost-most-qnx') -Destination (Join-Path $stage 'HudTest/hud-boost-most-qnx')
+$retiredHudBoost=Join-Path $stage 'HudTest/hud-boost-most-qnx'
+if(Test-Path -LiteralPath $retiredHudBoost -PathType Leaf){Remove-Item -LiteralPath $retiredHudBoost}
 # Remove only the two obsolete generated workers from the staged CDS apps.
 foreach ($relative in @('BoostDeck/boostdeck-collector-qnx','ShiftDeck/shift-deck-qnx')) {
     $oldWorker=Join-Path $stage $relative
