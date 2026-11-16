@@ -1,4 +1,4 @@
 interface:
   display_name: "NBT Evo"
-  short_description: "Portowanie, diagnostyka i aplikacje BMW NBT Evo"
-  default_prompt: "Użyj $nbt-evo do pracy z tą jednostką NBT Evo, uwzględniając jej firmware, architekturę QNX i zweryfikowane interfejsy."
+  short_description: "Architektura QNX, węzły i pliki platformy NBT Evo"
+  default_prompt: "Użyj $nbt-evo do analizy architektury i plików NBT Evo, zaczynając od lokalnej kopii jednostki."

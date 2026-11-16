@@ -1,73 +1,55 @@
 ---
 name: nbt-evo
-description: Develop, port, audit and troubleshoot software for BMW NBT Evo (iDrive 5/6), including QNX plugins, SSH/Qnet access, CDS telemetry, MOST diagnostics and reversible deployment. Use for NBT Evo head-unit work; do not assume these interfaces apply to CIC, EntryNav or MGU/iDrive 7.
+description: Analyze BMW NBT Evo (iDrive 5/6) architecture, QNX nodes, filesystem copies, native libraries and internal services. Use for navigating Evo dumps, distinguishing OMAP from Jacinto, reverse-engineering interfaces or preparing target-compatible native code.
 ---
 
-# NBT Evo engineering
+# NBT Evo platform
 
-Work from the actual head unit, framework binaries and ECU responses. Keep
-head-unit compatibility, display layout and engine signal calibration separate:
-a working menu does not establish correct diagnostic values or ECU controls.
+Use this skill as a map of the head-unit platform and local evidence. It is
+independent of vehicle chassis, engine and applications being developed.
 
-## Start with the relevant evidence
+## Architecture and available evidence
 
-Identify what the user needs: connectivity, an offline port/build, live data,
-deployment, or an ECU/terminal control. Respect existing project instructions
-and authorization. Do useful offline work when the vehicle is unavailable;
-do not attempt vehicle access merely because credentials or an address exist.
+NBT Evo is a distributed QNX system. Distinguish the OMAP HMI node from Jacinto,
+a node's own filesystem from remote Qnet mounts, and HU access from vehicle
+diagnostic endpoints. Establish where a command executes and what a path addresses.
 
-Read only the references needed:
+| Node | Observed address | Role |
+| --- | --- | --- |
+| OMAP / hu-omap | 169.254.199.119 | HMI, application frameworks and plugins |
+| Jacinto / hu-jacinto | 169.254.199.99 | Separate QNX node; alternative access to OMAP via Qnet |
 
-- [Connectivity](references/connectivity.md): SSH, Jacinto versus OMAP, Qnet,
-  private filesystem capture, and ENET sleep/wake failures.
-- [Native build and ABI](references/native-build.md): framework fingerprints,
-  reconstructed C++ declarations, QNX toolchain and deployment transactions.
-- [Telemetry and diagnostics](references/telemetry.md): CDS versus HSFZ/MOST,
-  parameter profiles, identification, freshness and transport lifecycle.
-- [Vehicle controls](references/controls.md): HUD, fault clearing, exhaust flap
-  and xDrive, where a command changes more than a displayed reading.
-- [F30 N20 / Evo Y case](references/f30-n20-evo-y.md): concrete results from
-  the originating project. Consult as a case study, not universal defaults.
+These are known addresses for the available unit, not universal Evo defaults.
+Verify node identity with `uname -a` when connected.
 
-When instructions or old documentation conflict, check current code, dated
-captures and owner feedback. Historical smoke tests and old candidate notes
-must not silently become claims about the present build.
+The private filesystem copy is **C:\Users\pawel\evo**, containing **opt/ and var/**.
+Start there for platform questions; do not ask for files already available.
+This is not a complete root filesystem, disk image or running-system snapshot.
+Missing /lib, /proc, /net or boot images do not prove absence on the head unit.
 
-## Essential distinctions
+Read the relevant reference:
 
-- SSH to the HU and diagnostics to the vehicle gateway are different endpoints.
-  Successful SCP does not prove the same SSH client/options/authentication work.
-- OMAP hosts HMI/plugins; an SSH session on Jacinto may require Qnet to reach
-  OMAP files. Verify the node before writing anything.
-- Prefer CDS for exposed routine vehicle readings and user units. Use a proven
-  internal diagnostic path for remaining data. Do not assume external ENET
-  diagnostics remain available after sleep without a tester.
-- A MOST DME tunnel is not demonstrated access to every ECU or every service.
-  Reusing a tunnel does not validate an engine's identifiers or scaling.
-- Do not infer engine family from displacement, cylinder count, badge or a
-  plausible gauge value. Unknown identity/mapping must stay explicit.
-- Exact lengths, service/identifier prefixes, sentinels, plausible ranges and
-  per-sample age determine validity. Never replace unavailable data with zero,
-  a constant ambient pressure or a renewed timestamp on cached values.
+- [Filesystem and evidence](references/filesystem.md): local paths, subsystem
+  directories, resources, persistence and investigation of the copied files.
+- [Architecture](references/architecture.md): QNX nodes, Qnet, execution context,
+  HMI frameworks, DSI, MOST and CDS.
+- [Native analysis](references/native-analysis.md): ELF/ABI analysis, available
+  tools, QNX toolchain and target dependencies.
 
-## Scope of live actions
+## Working method
 
-Use bounded parked reads for discovery. Live installation, HU restart and ECU
-state changes need authorization for that action; reuse authorization already
-given for the current scope. Preparing and testing a build offline does not
-itself authorize deploying it. Routine read access is not authorization for
-fault clearing, coding, output control, drivetrain switching or service changes.
+Identify the relevant subsystem and inspect actual files before proposing APIs
+or commands. Use filename/string searches for candidates, dynamic symbols for
+available entry points and disassembly for implementation details. Label results
+as observed files/exports, code-derived inference or runtime observation. A string
+match is not proof of a usable API; an absent string does not prove absence.
 
-Keep raw identification, VINs, credentials, filesystem captures, SDK licenses
-and proprietary libraries private. Publish de-identified fixtures and provenance
-for observed formulas. Preserve third-party notices when adapting a transport
-or HUD implementation.
+Keep the copied Evo tree as evidence. Write inventories, extracted data and
+patched copies into the current workspace, preferably private ignored directories.
+Do not publish proprietary binaries, credentials or personal persistence data.
+Check current binaries before relying on historical notes from another version.
 
-## Finish with a reviewable result
-
-For code changes, run relevant host tests first, cross-build for the actual
-target and check imported symbols/resources before proposing a live install.
-Use existing project scripts rather than inventing a second deployment path.
-Report separately what passed simulation, static checks, target loading,
-parked reads and sleep/wake testing. Keep remaining uncertainty attached to
-the specific interface, signal or control it affects.
+Offline analysis needs no live vehicle. If runtime access becomes necessary,
+establish the node and authorized scope first. Preparing code does not itself
+authorize installation, restart, coding or service changes; preserve authorization
+already given without inventing additional approval steps.
