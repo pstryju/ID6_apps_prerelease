@@ -54,6 +54,17 @@ $expected=(@($script:SshArgs | Select-Object -Skip 1)+@($command) | ForEach-Obje
 }) -join "`n"
 if ($result.Replace("`r`n","`n") -ne $expected) { throw 'Windows SSH argument quoting changed arguments.' }
 Write-Host 'Windows process transport: all 256 byte values and quoted arguments preserved.'
+$script:SshArgs=@('--argv')
+$mixedCommand="set -e`r`necho first`necho second`recho last"
+$expectedCommand="set -e`necho first`necho second`necho last"
+$actual=Invoke-Evo -Command $mixedCommand
+if ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($actual)) -cne $expectedCommand) {
+    throw 'Remote command line endings were not normalized before SSH.'
+}
+$script:SshArgs=@('--echo')
+$received=Invoke-Evo -Command $mixedCommand -InputBytes $payload -Bytes
+if ((Get-BytesHash $received) -ne (Get-BytesHash $payload)) { throw 'Command normalization changed binary stdin.' }
+Write-Host 'Remote shell commands use LF; binary uploads remain unchanged.'
 Initialize-EvoConnection -Head '169.254.199.119' -Password (ConvertTo-SecureString 'fixture-default' -AsPlainText -Force)
 if ('HostKeyAlgorithms=+ssh-rsa' -notin $script:SshArgs -or 'MACs=+hmac-sha1' -notin $script:SshArgs) {
     throw 'Verified Evo SSH options are not enabled by default.'

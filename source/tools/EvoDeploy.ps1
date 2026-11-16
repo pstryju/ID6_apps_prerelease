@@ -97,6 +97,10 @@ function Initialize-EvoAskPass {
 
 function Invoke-Evo([string]$Command, [byte[]]$InputBytes, [switch]$Bytes, [string]$Activity, [switch]$StreamText) {
     if ($StreamText -and $Bytes) { throw 'StreamText cannot be used for binary reads.' }
+    # Here-strings inherit CRLF from Windows checkouts. QNX ksh interprets
+    # the trailing CR in `set -e` as part of the option. Normalize only the
+    # remote shell command; binary stdin (helper/bundle/files) must stay exact.
+    $Command=$Command.Replace("`r`n","`n").Replace("`r","`n")
     if (-not $Activity) {
         $Activity=($Command -replace '\s+', ' ').Trim()
         if ($Activity.Length -gt 120) { $Activity=$Activity.Substring(0,117)+'...' }
