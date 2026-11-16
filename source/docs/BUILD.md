@@ -20,7 +20,7 @@ ssh root@HEAD_IP 'cat /opt/hmi/ID5/lib/libCoreFramework.A.so' > native/framework
 shasum -a 256 native/frameworks/*.so
 ```
 
-   Replace `HEAD_IP` with the head-unit SSH IP. Use a binary-safe transfer. If the old SSH server needs a legacy algorithm, configure it for that specific ENET connection. Use the head unit's existing library copies as link inputs. Where SDK linker versions differ, set `NBTEVO_RUNTIME_DIR` to a private directory with matching `libm.so.2`, `libsocket.so.3`, and `libstdc++.so.6` from the authorized unit or its reference image. The build also accepts `NBTEVO_FRAMEWORKS_DIR`.
+   Replace `HEAD_IP` with the head-unit SSH IP. Use a binary-safe transfer. If the old SSH server needs a legacy algorithm, configure it for that specific ENET connection. On a split-node unit (`uname -a` reports `hu-jacinto`), `/opt/hmi/ID5/lib` is empty on the SSH node; read the libraries over Qnet under `/net/hu-omap/fs/sda0/...` instead (see [Split-node units](PORTING.md#split-node-units)). Use the head unit's existing library copies as link inputs. Where SDK linker versions differ, set `NBTEVO_RUNTIME_DIR` to a private directory with matching `libm.so.2`, `libsocket.so.3`, and `libstdc++.so.6` from the authorized unit or its reference image. The build also accepts `NBTEVO_FRAMEWORKS_DIR`.
 3. Generate the RHMI resources with Python and Pillow. The scripts use host fonts, so image bytes can differ across hosts. DejaVu fonts are the fallback on Linux.
 
 ```sh
@@ -28,7 +28,7 @@ python3 -m pip install Pillow
 sh native/build.sh
 ```
 
-The script compiles the native libraries, worker executables, and the small ARM file-operations helper. The XML and manifests in `native/plugin` are the current layouts. Use the matching image archives from the packaged release.
+The script compiles the native libraries, worker executables, and the small ARM file-operations helper. Every worker includes the [MOST fallback](MOST.md). It opens the DSI library at run time, so no private library is needed to build it. The XML and manifests in `native/plugin` are the current layouts. Use the matching image archives from the packaged release.
 
 ## New firmware
 

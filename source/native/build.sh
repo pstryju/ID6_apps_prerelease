@@ -24,26 +24,29 @@ c -DPERF_LAB -Isrc -O2 -fPIC -c src/gauge_core.c -o out/core.o
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -shared src/plugin.cpp out/core.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libBoostDeck.so -o out/libBoostDeck.so
-c -DNATIVE_FAST -DPERF_LAB -Isrc -O2 src/collector.c out/core.o -Lout -lm -lsocket -o out/boostdeck-collector-qnx
+# Every worker carries the HSFZ-then-MOST link. dlopen and pthreads are in QNX libc; the DSI library is
+# opened only at run time, so nothing private is linked.
+worker() { c -Isrc -O2 "$@" src/diag_link.c src/most/*.c -Lout -lm -lsocket; }
+worker -DNATIVE_FAST -DPERF_LAB src/collector.c out/core.o -o out/boostdeck-collector-qnx
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/mhd_maps.cpp \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout \
     -Wl,--allow-shlib-undefined -Wl,-soname,libMhdMaps.so -o out/libMhdMaps.so
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared -DNATIVE_SHIFT_SMOOTH src/shift_deck.cpp out/core.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libShiftDeck.so -o out/libShiftDeck.so
-c -Isrc -O2 -DMHD_MAPS_ONLY src/collector.c src/gauge_core.c -Lout -lm -lsocket -o out/mhd-maps-qnx
-c -DNATIVE_FAST -Isrc -O2 -DSHIFT_DECK_ONLY src/collector.c out/core.o -Lout -lm -lsocket -o out/shift-deck-qnx
+worker -DMHD_MAPS_ONLY src/collector.c src/gauge_core.c -o out/mhd-maps-qnx
+worker -DNATIVE_FAST -DSHIFT_DECK_ONLY src/collector.c out/core.o -o out/shift-deck-qnx
 c -O2 -static fileops.c -o out/gaugedeck-fileops
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -shared src/engine_codes.cpp out/core.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libEngineCodes.so -o out/libEngineCodes.so
-c -Isrc -O2 -DENGINE_CODES_ONLY src/collector.c out/core.o -Lout -lm -lsocket -o out/engine-codes-qnx
+worker -DENGINE_CODES_ONLY src/collector.c out/core.o -o out/engine-codes-qnx
 for app in Bootmod3Suite XDriveControl; do
     case "$app" in
         Bootmod3Suite) flag=-DBM3_ONLY; worker=bootmod3-qnx ;;
         XDriveControl) flag=-DXDRIVE_ONLY; worker=xdrive-control-qnx ;;
     esac
-    c -Isrc -O2 "$flag" src/collector.c out/core.o -Lout -lm -lsocket -o "out/$worker"
+    worker "$flag" src/collector.c out/core.o -o "out/$worker"
     cxx -Isrc -Isdk -O2 "$flag" -fno-exceptions -fPIC -shared src/mhd_maps.cpp \
         "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lsocket \
         -Wl,--allow-shlib-undefined "-Wl,-soname,lib$app.so" -o "out/lib$app.so"

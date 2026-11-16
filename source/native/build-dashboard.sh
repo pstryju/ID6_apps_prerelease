@@ -24,16 +24,16 @@ for item in BoostDeck:plugin ShiftDeck:shift_deck EngineCodes:engine_codes; do
         "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -lm -lsocket \
         -Wl,--allow-shlib-undefined "-Wl,-soname,lib$app.so" -o "$out/lib$app.so"
 done
-c -DNATIVE_FAST -DPERF_LAB -DBD_STOCK_DME -Isrc -O2 src/collector.c "$out/core.o" -lm -lsocket -o "$out/boostdeck-collector-qnx"
-c -DNATIVE_FAST -DPERF_LAB -DSHIFT_DECK_ONLY -Isrc -O2 src/collector.c "$out/core.o" -lm -lsocket -o "$out/shift-deck-qnx"
-c -DENGINE_CODES_ONLY -DPERF_LAB -Isrc -O2 src/collector.c "$out/core.o" -lm -lsocket -o "$out/engine-codes-qnx"
-c -O2 -static fileops.c -o "$out/gaugedeck-fileops"
-c -DDIAGNOSTIC_PROBE_ONLY -Isrc -O2 src/collector.c "$out/core.o" -lm -lsocket -o "$out/diagnostic-probe-qnx"
 most="src/most/dsi_bind.c src/most/dsi_client.c src/most/most_link.c src/most/most_proto.c"
+c -DNATIVE_FAST -DPERF_LAB -DBD_STOCK_DME -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/boostdeck-collector-qnx"
+c -DNATIVE_FAST -DPERF_LAB -DSHIFT_DECK_ONLY -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/shift-deck-qnx"
+c -DENGINE_CODES_ONLY -DPERF_LAB -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/engine-codes-qnx"
+c -O2 -static fileops.c -o "$out/gaugedeck-fileops"
+c -DDIAGNOSTIC_PROBE_ONLY -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/diagnostic-probe-qnx"
 c -DPERF_LAB -DBD_STOCK_DME -Isrc -O2 src/boost_most.c $most "$out/core.o" -lm -lsocket -o "$out/boostdeck-most-qnx"
 c -DPERF_LAB -DBD_STOCK_DME -DBD_HUD_SOURCE -Isrc -O2 src/boost_most.c $most "$out/core.o" -lm -lsocket -o "$out/hud-boost-most-qnx"
 c -Isrc -O2 src/most_probe.c $most "$out/core.o" -lm -lsocket -o "$out/most-probe-qnx"
-c -DXDRIVE_ONLY -Isrc -O2 src/collector.c "$out/core.o" -lm -lsocket -o "$out/xdrive-control-qnx"
+c -DXDRIVE_ONLY -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/xdrive-control-qnx"
 cxx -DXDRIVE_ONLY -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/mhd_maps.cpp \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libXDriveControl.so -o "$out/libXDriveControl.so"
