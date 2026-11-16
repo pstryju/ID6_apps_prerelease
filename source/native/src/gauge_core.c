@@ -14,41 +14,24 @@ uint64_t bd_mono_ms(void) {
     return (uint64_t)t.tv_sec * 1000 + (uint64_t)t.tv_nsec / 1000000;
 }
 
-/* Payload bytes only, after the 62 DID prefix. Formula provenance: SIGNALS.md.
-   This car answered these DIDs; calibration/meaning still requires validation. */
-int bd_decode_did(unsigned did, const unsigned char *p, size_t n, double *out) {
-    unsigned r;
-    double x, lo, hi;
-    if (!p || !out || n != (did == 0x580f ? 1u : 2u)) return 0;
-    r = did == 0x580f ? p[0] : ((unsigned)p[0] << 8) | p[1];
-    switch (did) {
-    case 0x4201: x = r / 256.0; lo = 40; hi = 115; break; /* ambient kPa */
-    case 0x4205: x = r / 128.0; lo = 20; hi = 450; break; /* absolute kPa */
-    case 0x5889: x = r * 16.0 / 65535.0; lo = .5; hi = 2; break; /* lambda */
-    case 0x4a49:
-        /* This car returned FFFF. It can represent signed -0.1 or an unavailable
-           value: do not display a precise number until independently validated.
-           Other signed negatives remain valid, including FFFE (-0.2). */
-        if (r == 65535) return 0;
-        x = (r & 0x8000 ? (int)r - 65536 : (int)r) / 10.0;
-        lo = -64; hi = 64; break;
-    case 0x580f: if (r == 255) return 0; x = r * .75 - 48; lo = -48; hi = 143.25; break;
-    case 0xda12: x = (double)r - 48; lo = -48; hi = 180; break;
-    case 0x56d7: if (r == 65535) return 0; x = r / 50.0; lo = 0; hi = 500; break; /* rail bar */
-    case 0x586f: if (r == 65535) return 0; x = r / 1000.0; lo = 0; hi = 20; break; /* oil bar */
-    case 0x4300: if (r == 65535) return 0; x = r / 10.0 - 273.15; lo = -48; hi = 150; break;
-    default: return 0;
-    }
-    if (!isfinite(x) || x < lo || x > hi) return 0;
-    *out = x;
-    return 1;
-}
-
-int bd_decode_obd(unsigned pid,const unsigned char *data,size_t len,double *out) {
-    if(!data||!out)return 0;
-    if((pid==5||pid==0x5c)&&len==1){*out=(double)data[0]-40.;return 1;}
-    if(pid==0x23&&len==2){*out=(((unsigned)data[0]<<8)|data[1])*.1;return 1;}
+#include "signal_decode.h"
+static const bd_signal did_signals[]={
+#include "profiles/reference.inc"
+};
+static const bd_signal obd_signals[]={
+#include "profiles/obd.inc"
+};
+static int decode_signal(const bd_signal *signals,size_t count,unsigned id,
+                         const unsigned char *data,size_t len,double *out){
+    size_t i;for(i=0;i<count;++i)if(signals[i].identifier==id)
+        return bd_signal_decode(&signals[i],data,len,out);
     return 0;
+}
+int bd_decode_did(unsigned did,const unsigned char *data,size_t len,double *out){
+    return decode_signal(did_signals,sizeof did_signals/sizeof did_signals[0],did,data,len,out);
+}
+int bd_decode_obd(unsigned pid,const unsigned char *data,size_t len,double *out){
+    return decode_signal(obd_signals,sizeof obd_signals/sizeof obd_signals[0],pid,data,len,out);
 }
 
 int bd_encode(const bd_frame *f, char *out, size_t len) {

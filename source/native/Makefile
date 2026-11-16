@@ -4,7 +4,7 @@ PYTHON ?= python3
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror
 CORE = src/gauge_core.c
 CORE_LINK = $(CORE) src/diag_link.c
-HEADERS = src/gauge_core.h src/drive_frame.h src/diagnostic_lease.h src/diag_link.h
+HEADERS = src/gauge_core.h src/drive_frame.h src/diagnostic_lease.h src/diag_link.h src/signal_decode.h $(wildcard src/profiles/*.inc)
 # Every host worker carries the HSFZ-then-MOST link, with a fake DSI selected by ID6_FAKE_MOST.
 MOST = src/most/most_link.c src/most/dsi_client.c src/most/most_proto.c src/most/dsi_bind.c
 MOST_HEADERS = src/most/most_link.h src/most/dsi_client.h src/most/most_proto.h src/most/dsi_abi.h
@@ -60,13 +60,17 @@ build/test-cds: tests/test_cds.cpp src/cds_values.h src/cds_telemetry.h | build
 build/test-most: tests/test_most.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
 	$(CC) $(CFLAGS) -DMOST_HOST -Isrc -Itests $(filter %.c,$^) -pthread -o $@
 
-build/test-boost-most: src/boost_most.c $(CORE) tests/boost_most_env.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
+build/test-engine-profiles: tests/test_engine_profiles.c src/engine_profiles.h $(HEADERS) | build
+	$(CC) $(CFLAGS) -DPERF_LAB -DBD_STOCK_DME -Isrc $(filter %.c,$^) -lm -o $@
+
+build/test-boost-most: src/boost_most.c src/engine_profiles.h $(HEADERS) $(CORE) tests/boost_most_env.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
 	$(CC) $(CFLAGS) -DMOST_HOST -DPERF_LAB -DBD_STOCK_DME -Isrc -Itests $(filter %.c,$^) -pthread -lm -o $@
 
-build/test-hud-boost: src/boost_most.c $(CORE) tests/boost_most_env.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
+build/test-hud-boost: src/boost_most.c src/engine_profiles.h $(HEADERS) $(CORE) tests/boost_most_env.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
 	$(CC) $(CFLAGS) -DMOST_HOST -DPERF_LAB -DBD_STOCK_DME -DBD_HUD_SOURCE -Isrc -Itests $(filter %.c,$^) -pthread -lm -o $@
 
-test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/diagnostic-probe build/test-core build/stock-collector build/test-stock-core build/test-cds build/test-most build/test-boost-most build/xdrive-control build/test-hud-core build/test-hud-boost build/test-diag-link
+test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/diagnostic-probe build/test-core build/stock-collector build/test-stock-core build/test-cds build/test-most build/test-boost-most build/xdrive-control build/test-hud-core build/test-hud-boost build/test-diag-link build/test-engine-profiles
+	./build/test-engine-profiles
 	./build/test-hud-core
 	$(PYTHON) -B tests/test_xdrive.py
 	./build/test-most

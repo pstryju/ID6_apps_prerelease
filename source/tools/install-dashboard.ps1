@@ -9,6 +9,7 @@ param(
     [string]$IdentityFile,
     [Security.SecureString]$Password,
     [string]$Gateway = '169.254.20.21',
+    [ValidateSet('n20','auto','b48','n13')][string]$EngineProfile = 'n20',
     [int]$DisplayWidth = 0,
     [int]$DisplayHeight = 0
 )
@@ -68,6 +69,7 @@ if (-not [Net.IPAddress]::TryParse($Gateway,[ref]$gatewayAddress) -or $gatewayAd
 $Gateway=$gatewayAddress.ToString()
 Write-Host "Apps: $($Apps -join ', '). Two SSH sessions; no automatic restart."
 if('EngineCodes' -in $Apps -or 'XDriveControl' -in $Apps){Write-Host "Diagnostic gateway: $Gateway"}
+if('BoostDeck' -in $Apps -or 'HudTest' -in $Apps){Write-Host "Engine profile: $EngineProfile (B48/N13 mappings await validation)"}
 if (-not $PSCmdlet.ShouldProcess($Head, "Install $($Apps -join ', ') using one verified bundle")) { return }
 if (-not $Parked -and (Read-Host 'Auto stoi, iDrive jest wlaczone? Wpisz TAK, aby kontynuowac') -cne 'TAK') { throw 'Installation cancelled.' }
 Write-EvoStatus '[2/5] Jeden odczyt konfiguracji i zainstalowanych aplikacji'
@@ -102,8 +104,13 @@ foreach ($item in $items) {
         $item.files+=@{name='gateway-ip.txt';sha256=(Get-BytesHash $bytes)}
         $entries+=@{name="stage/$($item.name)/gateway-ip.txt";bytes=$bytes}
     }
+    if ($item.name -in @('BoostDeck','HudTest')) {
+        $bytes=[Text.Encoding]::ASCII.GetBytes($EngineProfile+"`n")
+        $item.files+=@{name='engine-profile.txt';sha256=(Get-BytesHash $bytes)}
+        $entries+=@{name="stage/$($item.name)/engine-profile.txt";bytes=$bytes}
+    }
 }
-$receipt=[ordered]@{schema=1;runId=$runId;head=$Head;state='Prepared';remoteRun=$run;gateway=$Gateway;apps=$items}
+$receipt=[ordered]@{schema=1;runId=$runId;head=$Head;state='Prepared';remoteRun=$run;gateway=$Gateway;engineProfile=$EngineProfile;apps=$items}
 $receiptDir=Get-EvoReceiptDirectory
 New-Item -ItemType Directory -Force $receiptDir | Out-Null
 $receiptPath=Join-Path $receiptDir "$runId.json"
