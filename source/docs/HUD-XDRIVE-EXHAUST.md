@@ -9,6 +9,14 @@ HU restart. The exact cause of the restart is not established.
 
 ### Current graphical candidate: RPM line
 
+The owner subsequently reported that the fill first becomes visible around
+950 RPM and is absent at idle. The former 116-unit scale maps 950 RPM to
+approximately 14 units. This suggests left clipping, not an RPM threshold.
+The layout correction moves the origin from x=0 to x=16, preserving the original 116-unit
+length (right edge x=132) and the RPM range 0–8000. At 700 RPM the thick segment spans
+x=16..26. The clipping hypothesis and physical placement need a target check;
+no diagnostic or rendering-rate changes accompany this correction.
+
 The owner confirmed the filled-polygon build draws correctly, but reported
 unusable lag while numeric RPM had been fast. The next candidate removes the
 renderer-side serial round-trip bottleneck: the baseline and thick segment

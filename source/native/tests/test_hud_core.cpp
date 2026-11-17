@@ -11,6 +11,8 @@ static most::View view(uint16_t src,uint16_t dst,uint16_t fkt,uint8_t op,const s
 }
 int main(){
     assert(evo_hud::rpmWidth(-1)==0&&evo_hud::rpmWidth(0)==0);
+    std::vector<hudterm::Point> idle=evo_hud::rpmShape(700);
+    assert(idle[0].x==16&&idle[1].x==26); // idle fill lies beyond the observed clipped first 14 units
     assert(evo_hud::rpmWidth(4000)==58&&evo_hud::rpmWidth(8000)==116&&evo_hud::rpmWidth(10000)==116);
     int previous=0;for(int rpm=0;rpm<=10000;++rpm){int width=evo_hud::rpmWidth(rpm);assert(width>=previous&&width<=116);previous=width;}
     hudterm::Config graphics=config();graphics.maxInFlight=1;
@@ -23,7 +25,7 @@ int main(){
             if(c.fkt==hudterm::kAddPolygon){
                 assert(!swapped&&c.payload[5]==8&&c.payload[4]==hudterm::kPolygon);
                 assert(hudterm::rdBe16(&c.payload[12])==30);
-                assert(hudterm::rdBe16(&c.payload[10])==58);fill=true;
+                assert(hudterm::rdBe16(&c.payload[10])==74);fill=true;
             }
             if(c.fkt==hudterm::kSwitchVisibility){assert(fill);assert(c.handle()==front&&hudterm::rdBe16(&c.payload[2])==back);swapped=true;}
             if(c.fkt==hudterm::kSetVisibility)assert(c.handle()==1&&c.payload[2]==1);
@@ -44,7 +46,7 @@ int main(){
     for(int rpm=0;rpm<=8000;rpm+=50){
         std::vector<hudterm::Point> shape=evo_hud::rpmShape(rpm);int twiceArea=0;
         for(size_t i=0;i<shape.size();++i){const hudterm::Point& a=shape[i];const hudterm::Point& b=shape[(i+1)%shape.size()];
-            assert(a.x>=0&&a.x<=116&&a.y>=30&&a.y<=35);twiceArea+=a.x*b.y-b.x*a.y;}
+            assert(a.x>=16&&a.x<=132&&a.y>=30&&a.y<=35);twiceArea+=a.x*b.y-b.x*a.y;}
         assert(twiceArea==2*(116+4*evo_hud::rpmWidth(rpm)));
     }
     // Steady-state frame: two ordered construction messages in parallel,
