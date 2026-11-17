@@ -1,5 +1,23 @@
 # Factory navigation and HUD terminal initialization
 
+## Trace quarantined after target incident
+
+Do not run the observer. On 2026-11-17 it registered DSI client 2062 but
+captured zero terminal records. After printing COMPLETE it terminated with
+SIGSEGV in target libstdc++.so.6 `__gnu_cxx::__exchange_and_add`, with null
+reference. The owner then reported an Evo restart. A unit restart cannot be
+explained as harmless process-local teardown; causality requires investigation.
+Both launchers are blocked before SSH, and the build no longer emits the tool.
+An older executable can remain in private output or temporary target folders;
+its existence is not authorization to run it directly. No further target
+experiment is part of the recovery. Instructions below are historical only.
+
+The observed client registration establishes only transport initialization,
+not successful passive reception. Registering the same terminal target has
+not been proven non-disruptive. Offline review must separately examine DSI
+registration ownership and process-exit C++ runtime/library compatibility;
+skipping destructors alone would not establish a safe observation mechanism.
+
 ## Offline evidence, 2026-11-17
 
 Analyzed the private copied `opt/nav/eceusa/bin/NavNBTEvoController`, SHA-256

@@ -150,7 +150,7 @@ w HMI, nie kasują błędów i nie restartują jednostki.
 | Cel | Komenda |
 | --- | --- |
 | Znane parametry DME przez MOST | `.\Test-Evo-MOST.cmd` |
-| Pasywny ślad inicjalizacji HUD przez navi (overlay wyłączony, 45 s) | `.\Test-Evo-HUD-Trace.cmd` |
+| Ślad inicjalizacji HUD przez navi | **Zablokowany po awarii procesu i restarcie Evo — nie uruchamiać** |
 | Identyfikacja DME do doboru profilu | `.\Test-Evo-Engine.cmd` |
 | Identyfikacja i odczyt kandydata klapy wydechu | `.\Test-Evo-Exhaust.cmd` |
 | Podstawowe odczyty przez gateway HSFZ | `.\Test-Evo-Diagnostics.cmd` |

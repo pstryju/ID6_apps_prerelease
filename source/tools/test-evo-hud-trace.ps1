@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param([string]$Head='169.254.199.119',[switch]$Parked,[Security.SecureString]$Password)
+throw 'HUD trace disabled: target SIGSEGV followed by owner-reported Evo restart. Do not retry on the vehicle; offline investigation required.'
 . "$PSScriptRoot/EvoDeploy.ps1"
 . "$PSScriptRoot/EvoBatch.ps1"
 if(-not $Parked -and (Read-Host 'Auto stoi, nasz overlay HUD jest WYLACZONY? Wpisz TAK') -cne 'TAK'){throw 'Trace cancelled.'}
