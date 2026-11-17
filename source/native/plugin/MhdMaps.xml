@@ -27,6 +27,12 @@
       <imageIdModel id="62" imageId="56002" />
       <raDataModel id="51" modelType="Richtext" />
       <raDataModel id="52" modelType="Richtext" />
+      <imageIdModel id="63" imageId="56010" />
+      <imageIdModel id="64" imageId="56012" />
+      <imageIdModel id="65" imageId="56014" />
+      <imageIdModel id="66" imageId="56200" />
+      <imageIdModel id="67" imageId="56202" />
+      <imageIdModel id="68" imageId="56204" />
     </models>
     <hmiStates>
       <hmiState id="100" text="MHD+ Suite">
@@ -93,23 +99,122 @@
           </label>
         </components>
         <optionComponents>
-          <button id="312" action="12" text="Exhaust flap" />
+          <button id="312" action="12" text="Exhaust Flap" />
           <button id="313" action="13" text="Max Cooling" />
         </optionComponents>
       </hmiState>
-      <hmiState id="102" parentId="100" text="Exhaust flap">
+      <hmiState id="102" parentId="100" text="Exhaust Flap">
         <components>
-          <button id="215" action="25" text="OEM control" />
-          <button id="216" action="26" text="Request open" />
-          <button id="217" action="27" text="Request closed" />
-          <label id="321" model="51" />
+          <image id="230" model="66">
+            <properties>
+              <property id="20" value="52" />
+              <property id="21" value="130" />
+              <property id="9" value="320" />
+              <property id="10" value="168" />
+              <property id="2" value="false" />
+              <property id="3" value="true" />
+            </properties>
+          </image>
+          <button id="215" action="26" imageModel="65">
+            <properties>
+              <property id="20" value="52" />
+              <property id="21" value="130" />
+              <property id="9" value="320" />
+              <property id="10" value="168" />
+            </properties>
+          </button>
+          <image id="231" model="67">
+            <properties>
+              <property id="20" value="384" />
+              <property id="21" value="130" />
+              <property id="9" value="320" />
+              <property id="10" value="168" />
+              <property id="2" value="false" />
+              <property id="3" value="true" />
+            </properties>
+          </image>
+          <button id="216" action="25" imageModel="65">
+            <properties>
+              <property id="20" value="384" />
+              <property id="21" value="130" />
+              <property id="9" value="320" />
+              <property id="10" value="168" />
+            </properties>
+          </button>
+          <image id="232" model="68">
+            <properties>
+              <property id="20" value="716" />
+              <property id="21" value="130" />
+              <property id="9" value="320" />
+              <property id="10" value="168" />
+              <property id="2" value="false" />
+              <property id="3" value="true" />
+            </properties>
+          </image>
+          <button id="217" action="27" imageModel="65">
+            <properties>
+              <property id="20" value="716" />
+              <property id="21" value="130" />
+              <property id="9" value="320" />
+              <property id="10" value="168" />
+            </properties>
+          </button>
+          <label id="321" model="51">
+            <properties>
+              <property id="20" value="35" />
+              <property id="21" value="360" />
+              <property id="9" value="1020" />
+              <property id="10" value="50" />
+            </properties>
+          </label>
         </components>
       </hmiState>
       <hmiState id="103" parentId="100" text="Max Cooling">
         <components>
-          <button id="218" action="28" text="Off" />
-          <button id="219" action="29" text="On" />
-          <label id="322" model="52" />
+          <image id="223" model="63">
+            <properties>
+              <property id="20" value="146" />
+              <property id="21" value="130" />
+              <property id="9" value="380" />
+              <property id="10" value="200" />
+              <property id="2" value="false" />
+              <property id="3" value="true" />
+            </properties>
+          </image>
+          <button id="218" action="28" imageModel="65">
+            <properties>
+              <property id="20" value="146" />
+              <property id="21" value="130" />
+              <property id="9" value="380" />
+              <property id="10" value="200" />
+            </properties>
+          </button>
+          <image id="224" model="64">
+            <properties>
+              <property id="20" value="561" />
+              <property id="21" value="130" />
+              <property id="9" value="380" />
+              <property id="10" value="200" />
+              <property id="2" value="false" />
+              <property id="3" value="true" />
+            </properties>
+          </image>
+          <button id="219" action="29" imageModel="65">
+            <properties>
+              <property id="20" value="561" />
+              <property id="21" value="130" />
+              <property id="9" value="380" />
+              <property id="10" value="200" />
+            </properties>
+          </button>
+          <label id="322" model="52">
+            <properties>
+              <property id="20" value="35" />
+              <property id="21" value="360" />
+              <property id="9" value="1020" />
+              <property id="10" value="50" />
+            </properties>
+          </label>
         </components>
       </hmiState>
     </hmiStates>

@@ -35,8 +35,9 @@ class XDrive(unittest.TestCase):
                         for ecu,request,response in script:
                             n,kind=struct.unpack('>IH',exact(conn,6));self.assertEqual(kind,1)
                             self.assertEqual(exact(conn,n),bytes.fromhex('F4'+ecu+request))
-                            body=bytes.fromhex(ecu+'F4'+response)
-                            conn.sendall(struct.pack('>IH',len(body),1)+body)
+                            if response is not None:
+                                body=bytes.fromhex(ecu+'F4'+response)
+                                conn.sendall(struct.pack('>IH',len(body),1)+body)
                         self.assertEqual(conn.recv(1),b'', 'unexpected extra read/write')
                 except Exception as e:errors.append(e)
             thread=threading.Thread(target=run);thread.start()
@@ -49,7 +50,14 @@ class XDrive(unittest.TestCase):
         self.assertIn('reports AWD',self.exchange(['--status','0'],[ID,CAP,AWD]))
 
     def test_unsupported_dsc_sends_no_control(self):
-        self.assertIn('unsupported',self.exchange(['--drive-mode','0'],[('29','22F150','62F150123456')]))
+        self.assertIn('DSC 123456 is outside the supported control list',self.exchange(['--drive-mode','0'],[('29','22F150','62F150123456')]))
+
+    def test_identification_failure_is_distinguished_without_writes(self):
+        for response,message in ((None,'No DSC reply at 0x29'),
+                                 ('7F2231','DSC identification refused (NRC 31)'),
+                                 ('62F1500000','unrecognized identification format'),
+                                 ('62F1500F2100','DSC 0F2100 is outside the supported control list')):
+            self.assertIn(message,self.exchange(['--status','0'],[('29','22F150',response)]))
 
     def test_unavailable_park_or_running_engine_or_speed_blocks_write(self):
         for tail in ([('18','22DA2E','7F2231')],
@@ -58,7 +66,7 @@ class XDrive(unittest.TestCase):
             self.assertIn('engine off',self.exchange(['--drive-mode','0'],[ID,CAP,AWD,*tail]))
 
     def test_missing_capability_blocks_write(self):
-        self.assertIn('unavailable',self.exchange(['--drive-mode','0'],[ID,('29','22DBE1','7F2231')]))
+        self.assertIn('DSC mode read refused (NRC 31)',self.exchange(['--drive-mode','0'],[ID,('29','22DBE1','7F2231')]))
 
     def test_ack_requires_transfer_case_readback(self):
         command=('29','2EDBE100','6EDBE1')

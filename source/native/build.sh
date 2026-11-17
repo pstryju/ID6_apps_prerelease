@@ -34,9 +34,10 @@ cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/mhd_maps.cpp \
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared -DNATIVE_SHIFT_SMOOTH src/shift_deck.cpp out/core.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libShiftDeck.so -o out/libShiftDeck.so
-worker -DMHD_MAPS_ONLY src/collector.c src/gauge_core.c -o out/mhd-maps-qnx
+worker -DPERF_LAB -DMHD_MAPS_ONLY src/collector.c src/gauge_core.c -o out/mhd-maps-qnx
 worker -DNATIVE_FAST -DSHIFT_DECK_ONLY src/collector.c out/core.o -o out/shift-deck-qnx
 c -O2 -static fileops.c -o out/gaugedeck-fileops
+c -O2 src/exhaust_flap_launcher.c -lsocket -o out/exhaust-flap-qnx
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -shared src/engine_codes.cpp out/core.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libEngineCodes.so -o out/libEngineCodes.so

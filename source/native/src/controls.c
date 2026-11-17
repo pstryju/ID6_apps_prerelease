@@ -130,9 +130,18 @@ static void control(int fd, const char *mode, unsigned value) {
         for (i=3;i<(unsigned)n-3;++i) if (reply[i]) break;
         if (i==(unsigned)n-3) index=(reply[i]<<16)|(reply[i+1]<<8)|reply[i+2];
     }
-    if (index!=0x0f2510 && index!=0x0f2850) { puts("DSC variant unsupported for this control."); return; }
-    if (exchange(fd,0x29,capability,3,cap_ack,3,reply,sizeof reply,800,&negative)<4) {
-        puts("DSC mode control unavailable."); return;
+    if (n == -2) { printf("DSC identification refused (NRC %02X).\n",negative); return; }
+    if (n < 0) { puts("No DSC reply at 0x29. Check the diagnostic gateway."); return; }
+    if (!index) { puts("DSC replied with an unrecognized identification format."); return; }
+    if (index!=0x0f2510 && index!=0x0f2850) {
+        printf("DSC %06X is outside the supported control list.\n",index);
+        return;
+    }
+    n=exchange(fd,0x29,capability,3,cap_ack,3,reply,sizeof reply,800,&negative);
+    if (n<4) {
+        if (n==-2) printf("DSC mode read refused (NRC %02X).\n",negative);
+        else puts("DSC mode read unavailable.");
+        return;
     }
     current=read_mode(fd);
     if (!strcmp(mode,"--status")) {
