@@ -13,19 +13,26 @@ inline std::vector<nbt::hudterm::Point> strip(int width,int top,int height){
     p[0].x=0;p[0].y=(int16_t)top;p[1].x=(int16_t)width;p[1].y=(int16_t)top;
     p[2].x=(int16_t)width;p[2].y=(int16_t)(top+height);p[3].x=0;p[3].y=(int16_t)(top+height);return p;
 }
-inline nbt::hudterm::Batch rpmGraph(int rpm,unsigned front,bool first){
+inline std::vector<nbt::hudterm::Point> rpmShape(int rpm){
+    int width=rpmWidth(rpm);
+    if(!width)return strip(kGraphWidth,kGraphY+2,1);
+    if(width==kGraphWidth)return strip(kGraphWidth,kGraphY,5);
+    // Union of the thin full scale and thick active strip: one filled shape.
+    const int xy[8][2]={{0,kGraphY},{width,kGraphY},{width,kGraphY+2},
+        {kGraphWidth,kGraphY+2},{kGraphWidth,kGraphY+3},{width,kGraphY+3},
+        {width,kGraphY+5},{0,kGraphY+5}};
+    std::vector<nbt::hudterm::Point> p(8);
+    for(unsigned i=0;i<8;++i){p[i].x=(int16_t)xy[i][0];p[i].y=(int16_t)xy[i][1];}return p;
+}
+inline nbt::hudterm::Batch rpmGraph(int rpm,unsigned front,bool first,bool initialize=true){
     using namespace nbt::hudterm;
     unsigned back=front==5?6:5;
     Batch b("HUD RPM line",true);
     b.add(kRemoveAllItems,removeAllItems((uint16_t)back));
     // Match the packaged windshield renderer's filled-polygon path. Its
     // support for ImageSetLineColor/Width or two-point polylines is unproven.
-    b.add(kSetFillColor,setFillColor((uint16_t)back,4));
-    b.add(kAddPolygon,addPolygon((uint16_t)back,0,kPolygon,strip(kGraphWidth,kGraphY+2,1)));
-    int width=rpmWidth(rpm);
-    if(width){
-        b.add(kAddPolygon,addPolygon((uint16_t)back,1,kPolygon,strip(width,kGraphY,5)));
-    }
+    if(initialize)b.add(kSetFillColor,setFillColor((uint16_t)back,4));
+    b.add(kAddPolygon,addPolygon((uint16_t)back,0,kPolygon,rpmShape(rpm)));
     if(first)b.add(kTextareaSetText,setText(2,""));
     b.add(kSwitchVisibility,switchVisibility((uint16_t)(back==5?6:5),(uint16_t)back));
     if(first)b.add(kSetVisibility,setVisibility(1,true));

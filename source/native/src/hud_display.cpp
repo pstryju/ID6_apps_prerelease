@@ -58,10 +58,14 @@ int listener(unsigned port){
     if(fcntl(fd,F_SETFL,O_NONBLOCK)<0||bind(fd,reinterpret_cast<sockaddr*>(&a),sizeof a)<0){close(fd);return -1;}return fd;
 }
 void pump(){
+    for(unsigned sent=0;sent<3;++sent){
     most::Msg m;bool have;
     pthread_mutex_lock(&lock);core->tick((uint32_t)bd_mono_ms());have=core->next((uint32_t)bd_mono_ms(),m);pthread_mutex_unlock(&lock);
-    if(have&&dsi_send_fn(m.fblock,m.inst,m.fkt,m.opType,m.data.empty()?0:&m.data[0],m.data.size())!=0){
+    if(!have)break;
+    if(dsi_send_fn(m.fblock,m.inst,m.fkt,m.opType,m.data.empty()?0:&m.data[0],m.data.size())!=0){
         pthread_mutex_lock(&lock);core->sendFailed((uint32_t)bd_mono_ms());pthread_mutex_unlock(&lock);
+        break;
+    }
     }
 }
 void clear(){
@@ -77,7 +81,7 @@ int main(int argc,char** argv){
     if(argc!=2||strcmp(argv[1],"--session"))return 2;
     pid_t parent=getppid();if(parent<=1)return 2;
     signal(SIGINT,stop);signal(SIGTERM,stop);signal(SIGPIPE,SIG_IGN);signal(SIGALRM,SIG_DFL);
-    hudterm::Config cfg;cfg.handles.allow(1);cfg.handles.allow(2);cfg.handles.allow(5);cfg.handles.allow(6);cfg.navFrame=1;cfg.maxBatch=12;cfg.maxInFlight=1;
+    hudterm::Config cfg;cfg.handles.allow(1);cfg.handles.allow(2);cfg.handles.allow(5);cfg.handles.allow(6);cfg.navFrame=1;cfg.maxBatch=12;cfg.maxInFlight=3;
     core=new hudterm::Core(cfg);core->setExternalIdle(false,(uint32_t)bd_mono_ms());
     int feed_fd=listener(HUD_FEED_PORT);
     if(feed_fd<0||most_dsi_bind()!=0)return 1;
@@ -87,6 +91,8 @@ int main(int argc,char** argv){
     uint64_t next_frame=0,next_status=0;bool drawn=false;
     unsigned last_epoch=0;
     unsigned front=6,pending_front=0;
+    unsigned initialized=0;
+    int displayed_width=-1,pending_width=-1;
     while(running&&getppid()==parent){
         alarm(15);uint64_t now=bd_mono_ms();
         pthread_mutex_lock(&lock);bool exited=dsi_exited;pthread_mutex_unlock(&lock);
@@ -94,13 +100,14 @@ int main(int argc,char** argv){
         for(unsigned i=0;i<8;++i){hud_feed next;ssize_t n=recv(feed_fd,&next,sizeof next,0);if(n<=0)break;if(n==sizeof next&&hud_feed_valid(next,now))feed=next;}
         bool data_ok=hud_feed_valid(feed,now)&&feed.nav_idle&&feed.rpm>=0;
         pthread_mutex_lock(&lock);core->setExternalIdle(hud_feed_valid(feed,now)&&feed.nav_idle,(uint32_t)now);hudterm::Status state=core->status();unsigned epoch=core->epoch();bool busy=core->busy();pthread_mutex_unlock(&lock);
-        if(epoch!=last_epoch){drawn=false;pending_front=0;front=6;last_epoch=epoch;}
-        if(pending_front&&!busy&&state==hudterm::kReady){front=pending_front;pending_front=0;}
+        if(epoch!=last_epoch){drawn=false;pending_front=0;front=6;initialized=0;displayed_width=-1;last_epoch=epoch;}
+        if(pending_front&&!busy&&state==hudterm::kReady){front=pending_front;initialized|=1u<<front;displayed_width=pending_width;pending_front=0;}
         if(!data_ok&&drawn){clear();drawn=false;}
-        if(data_ok&&state==hudterm::kReady&&!busy&&now>=next_frame){
-            hudterm::Batch b=evo_hud::rpmGraph(feed.rpm,front,!drawn);
+        if(data_ok&&state==hudterm::kReady&&!busy&&now>=next_frame&&(!drawn||evo_hud::rpmWidth(feed.rpm)!=displayed_width)){
+            unsigned back=front==5?6:5;
+            hudterm::Batch b=evo_hud::rpmGraph(feed.rpm,front,!drawn,!(initialized&(1u<<back)));
             pthread_mutex_lock(&lock);hudterm::SubmitResult accepted=core->submit(b,(uint32_t)now);pthread_mutex_unlock(&lock);
-            if(accepted==hudterm::kQueued){pending_front=front==5?6:5;drawn=true;next_frame=now+100;}
+            if(accepted==hudterm::kQueued){pending_front=back;pending_width=evo_hud::rpmWidth(feed.rpm);drawn=true;next_frame=now+50;}
         }
         pump();
         if(now>=next_status){

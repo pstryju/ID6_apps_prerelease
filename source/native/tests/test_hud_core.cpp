@@ -21,9 +21,9 @@ int main(){
             const hudterm::Call& c=graph.calls[i];assert(hudterm::callOk(c,graphics.handles));
             assert(c.handle()==back||c.handle()==1||c.handle()==2||(c.fkt==hudterm::kSwitchVisibility&&c.handle()==front));
             if(c.fkt==hudterm::kAddPolygon){
-                assert(!swapped&&c.payload[5]==4&&c.payload[4]==hudterm::kPolygon);
-                assert(hudterm::rdBe16(&c.payload[12])==(hudterm::rdBe16(&c.payload[2])==1?30:32));
-                if(hudterm::rdBe16(&c.payload[2])==1){assert(hudterm::rdBe16(&c.payload[10])==58);fill=true;}
+                assert(!swapped&&c.payload[5]==8&&c.payload[4]==hudterm::kPolygon);
+                assert(hudterm::rdBe16(&c.payload[12])==30);
+                assert(hudterm::rdBe16(&c.payload[10])==58);fill=true;
             }
             if(c.fkt==hudterm::kSwitchVisibility){assert(fill);assert(c.handle()==front&&hudterm::rdBe16(&c.payload[2])==back);swapped=true;}
             if(c.fkt==hudterm::kSetVisibility)assert(c.handle()==1&&c.payload[2]==1);
@@ -41,6 +41,29 @@ int main(){
         assert(renderer.submit(graph,100)==hudterm::kQueued);assert(renderer.next(100,packet));
         renderer.setExternalIdle(false,101);assert(!renderer.next(101,packet)&&!renderer.busy());
     }
+    for(int rpm=0;rpm<=8000;rpm+=50){
+        std::vector<hudterm::Point> shape=evo_hud::rpmShape(rpm);int twiceArea=0;
+        for(size_t i=0;i<shape.size();++i){const hudterm::Point& a=shape[i];const hudterm::Point& b=shape[(i+1)%shape.size()];
+            assert(a.x>=0&&a.x<=116&&a.y>=30&&a.y<=35);twiceArea+=a.x*b.y-b.x*a.y;}
+        assert(twiceArea==2*(116+4*evo_hud::rpmWidth(rpm)));
+    }
+    // Steady-state frame: two ordered construction messages in parallel,
+    // then a swap barrier. With 120 ms replies, finish in two RTTs, not five.
+    hudterm::Config fast=config();fast.maxInFlight=3;hudterm::Core pipeline(fast);
+    pipeline.setLink(true,0x2001,1);pipeline.setHost(0x0101,1);
+    hudterm::Batch update=evo_hud::rpmGraph(4000,6,false,false);assert(update.calls.size()==3);
+    assert(pipeline.submit(update,2)==hudterm::kQueued);
+    most::Msg erase,polygon,swap,blocked;
+    assert(pipeline.next(2,erase)&&pipeline.next(2,polygon)&&!pipeline.next(2,swap));
+    most::View reply=view(0x0101,0x2001,polygon.fkt,0x0d,polygon.data);pipeline.onMessage(reply,122);
+    assert(!pipeline.next(122,swap)); // even out-of-order replies cannot expose an unfinished image
+    reply=view(0x0101,0x2001,erase.fkt,0x0d,erase.data);pipeline.onMessage(reply,122);
+    assert(pipeline.next(122,swap)&&swap.fkt==hudterm::kSwitchVisibility);
+    reply=view(0x0101,0x2001,swap.fkt,0x0d,swap.data);pipeline.onMessage(reply,242);
+    assert(!pipeline.busy());
+    assert(pipeline.submit(update,300)==hudterm::kQueued);
+    assert(pipeline.next(300,erase)&&pipeline.next(300,polygon));
+    pipeline.setExternalIdle(false,301);assert(!pipeline.next(301,blocked)&&!pipeline.busy());
     hudterm::Core refused(graphics);most::Msg command;
     refused.setLink(true,0x2001,1);refused.setHost(0x0101,1);
     assert(refused.submit(evo_hud::rpmGraph(1000,6,true),2)==hudterm::kQueued&&refused.next(2,command));

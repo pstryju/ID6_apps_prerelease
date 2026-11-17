@@ -241,6 +241,10 @@ bool Core::next(uint32_t now, most::Msg& out) {
     if (status_ != kReady || !haveCurrent_ || nextCall_ >= current_.calls.size()) return false;
     if (inFlight_.size() >= cfg_.maxInFlight) return false;
     const Call& c = current_.calls[nextCall_];
+    // Pipeline image construction, but do not expose a buffer before every
+    // preceding operation has been acknowledged. Also serialize visibility
+    // changes themselves (swap followed by frame visibility at startup).
+    if((c.fkt==kSwitchVisibility||c.fkt==kSetVisibility)&&!inFlight_.empty())return false;
     if (!buildCall(host_, c, tag_, cfg_.handles, out)) {   // checked at submit: only a host change could do this
         fail("a queued call no longer builds", now);
         return false;

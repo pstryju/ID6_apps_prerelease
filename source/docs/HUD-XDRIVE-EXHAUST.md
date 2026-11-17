@@ -9,6 +9,22 @@ HU restart. The exact cause of the restart is not established.
 
 ### Current graphical candidate: RPM line
 
+The owner confirmed the filled-polygon build draws correctly, but reported
+unusable lag while numeric RPM had been fast. The next candidate removes the
+renderer-side serial round-trip bottleneck: the baseline and thick segment
+form one polygon, and palette setup happens once per acknowledged image-buffer
+initialization. Steady updates have three calls: clear back buffer, draw shape,
+swap buffers. Construction uses a bounded three-call pipeline, with an explicit
+ACK barrier before any swap/frame-visibility operation. No frame backlog is
+allowed; only the latest CDS value is drawn when ready. Unchanged pixel widths
+are not redrawn. Minimum frame-start spacing is 50 ms; CDS/feed and actual
+terminal latency still bound the visible rate. No predicted RPM is generated.
+
+A delayed-response host test finishes a steady frame in two 120 ms round trips
+and verifies that an out-of-order answer cannot expose an unfinished image.
+Navigation can cancel all unsent work even with construction in flight.
+Actual windshield latency remains a target test, not a measured speedup claim.
+
 Owner feedback on the first line build: enabling it immediately produced
 "HUD profile/error: overlay stopped", with no drawing. That build's command
 sequence has not been validated on the windshield terminal. The updated
@@ -38,10 +54,10 @@ the reference band footprint. Strip heights are 1/5; palette role 4 is a candida
 foreground, not a guaranteed physical colour on this windshield. Geometry,
 placement, readability and cold-start availability need a parked target check.
 
-Each batch is complete and bounded (at most nine calls), with one call in
-flight. No animation frames queue up: the renderer waits for the current batch,
-then draws the latest RPM, aiming at 100 ms between starts subject to terminal
-latency. Navigation cancels unsent drawing/swap calls. Stop removes items only
+Each batch is complete and bounded (at most six startup calls, three steady
+calls). No animation frames queue up: the renderer waits for the current batch,
+then draws the latest RPM subject to the ACK barrier and terminal latency.
+Navigation cancels unsent drawing/swap calls. Stop removes items only
 from image buffers 5/6 and clears text when guidance is fresh/idle; shared frame
 1 is never hidden. A terminal error stops output rather than force-resetting.
 
