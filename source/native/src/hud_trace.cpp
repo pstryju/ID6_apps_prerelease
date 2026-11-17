@@ -1,4 +1,6 @@
 // Observe terminal traffic only. No HUD method, DME request or frame write.
+// Quarantined after a target SIGSEGV and reported head-unit restart.
+#error "HUD observer quarantined: resolve registration and runtime lifecycle before rebuilding"
 #include "gauge_core.h"
 #include "hud_trace.h"
 extern "C" {

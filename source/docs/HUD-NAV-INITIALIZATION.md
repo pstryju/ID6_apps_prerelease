@@ -2,6 +2,9 @@
 
 ## Trace quarantined after target incident
 
+See [offline incident review](HUD-TRACE-INCIDENT.md) for the runtime dependency
+comparison, reception limits and evidence needed before any further live test.
+
 Do not run the observer. On 2026-11-17 it registered DSI client 2062 but
 captured zero terminal records. After printing COMPLETE it terminated with
 SIGSEGV in target libstdc++.so.6 `__gnu_cxx::__exchange_and_add`, with null
