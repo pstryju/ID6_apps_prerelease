@@ -36,6 +36,9 @@ build/engine-codes: $(WORKER) | build
 build/xdrive-control: $(WORKER) src/controls.c | build
 	$(HOST_LINK) -DXDRIVE_ONLY $(filter %.c,$(filter-out src/controls.c,$^)) -lm -o $@
 
+build/test-hud-trace: tests/test_hud_trace.cpp src/hud_trace.h | build
+	$(CXX) -O2 -std=c++98 -Wall -Wextra -Werror -Isrc tests/test_hud_trace.cpp -o $@
+
 build/test-hud-core: tests/test_hud_core.cpp vendor/hud/hud_core.cpp $(wildcard vendor/hud/cluster/*.hpp vendor/hud/most/*.hpp) src/hud_feed.h src/hud_lifecycle.h src/hud_rpm_graph.h | build
 	$(CXX) -O2 -std=c++98 -Wall -Wextra -Werror -Isrc -Ivendor/hud tests/test_hud_core.cpp vendor/hud/hud_core.cpp -pthread -o $@
 
@@ -69,7 +72,8 @@ build/test-boost-most: src/boost_most.c src/engine_profiles.h $(HEADERS) $(CORE)
 build/test-hud-boost: src/boost_most.c src/engine_profiles.h $(HEADERS) $(CORE) tests/boost_most_env.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
 	$(CC) $(CFLAGS) -DMOST_HOST -DPERF_LAB -DBD_STOCK_DME -DBD_HUD_SOURCE -Isrc -Itests $(filter %.c,$^) -pthread -lm -o $@
 
-test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/diagnostic-probe build/test-core build/stock-collector build/test-stock-core build/test-cds build/test-most build/test-boost-most build/xdrive-control build/test-hud-core build/test-hud-boost build/test-diag-link build/test-engine-profiles
+test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/diagnostic-probe build/test-core build/stock-collector build/test-stock-core build/test-cds build/test-most build/test-boost-most build/xdrive-control build/test-hud-core build/test-hud-boost build/test-diag-link build/test-engine-profiles build/test-hud-trace
+	./build/test-hud-trace
 	./build/test-engine-profiles
 	./build/test-hud-core
 	$(PYTHON) -B tests/test_xdrive.py

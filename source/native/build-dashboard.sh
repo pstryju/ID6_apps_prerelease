@@ -42,5 +42,6 @@ cxx -DPERF_LAB -DBD_STOCK_DME -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/
     -Wl,--allow-shlib-undefined -Wl,-soname,libHudTest.so -o "$out/libHudTest.so"
 c -Isrc -O2 -c src/most/dsi_bind.c -o "$out/hud-dsi-bind.o"
 c -Isrc -O2 -c src/most/dsi_client.c -o "$out/hud-dsi-client.o"
+cxx -Isrc -O2 src/hud_trace.cpp "$out/hud-dsi-bind.o" "$out/hud-dsi-client.o" "$out/core.o" -lsocket -o "$out/hud-trace-qnx"
 cxx -DPERF_LAB -DBD_STOCK_DME -Isrc -Ivendor/hud -O2 -fexceptions src/hud_display.cpp vendor/hud/hud_core.cpp \
     "$out/hud-dsi-bind.o" "$out/hud-dsi-client.o" "$out/core.o" -lsocket -lm -o "$out/hud-display-qnx"
