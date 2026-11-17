@@ -52,7 +52,8 @@ public:
             sendto(socket_,&f,sizeof f,0,reinterpret_cast<sockaddr*>(&dest),sizeof dest);
         }
         for(unsigned i=0;i<8;++i){hud_status s;ssize_t n=recv(socket_,&s,sizeof s,0);if(n<=0)break;
-            if(life_.canRun()&&n==sizeof s&&!memcmp(s.magic,"HUS1",4)){
+            if(life_.canRun()&&n==sizeof s&&!memcmp(s.magic,"HUS2",4)&&memchr(s.detail,0,sizeof s.detail)){
+                if(s.state==3&&s.detail[0]){label(s.detail);continue;}
                 label(s.state==1?"HUD active: graphical RPM 0-8000 from CDS.":
                     s.state==2?"HUD yielded to factory navigation.":s.state==3?"HUD profile/error: overlay stopped.":
                     s.state==4?"Waiting for fresh CDS / navigation state.":"HUDTerminal missing or unsupported (requires unique 82/00 at 0101).");

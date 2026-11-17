@@ -104,8 +104,10 @@ int main(int argc,char** argv){
         }
         pump();
         if(now>=next_status){
-            hud_status s;memset(&s,0,sizeof s);memcpy(s.magic,"HUS1",4);
-            pthread_mutex_lock(&lock);s.state=core->status();s.host=host_address;pthread_mutex_unlock(&lock);
+            hud_status s;memset(&s,0,sizeof s);memcpy(s.magic,"HUS2",4);
+            pthread_mutex_lock(&lock);s.state=core->status();s.host=host_address;
+            if(s.state==hudterm::kFailed)snprintf(s.detail,sizeof s.detail,"%s",core->failureReason());
+            pthread_mutex_unlock(&lock);
             if(s.state==hudterm::kReady&&!data_ok)s.state=4;
             sockaddr_in d;memset(&d,0,sizeof d);d.sin_family=AF_INET;d.sin_addr.s_addr=htonl(INADDR_LOOPBACK);d.sin_port=htons(HUD_STATUS_PORT);
             sendto(feed_fd,&s,sizeof s,0,reinterpret_cast<sockaddr*>(&d),sizeof d);next_status=now+1000;

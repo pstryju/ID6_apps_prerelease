@@ -132,6 +132,7 @@ public:
     // A status change since the last call, for the listener.
     bool takeStatusChange(Status& s);
     TerminalStats stats() const { return stats_; }
+    const char* failureReason() const { return failureReason_; }
 
 private:
     struct InFlight { uint16_t fkt, handle; uint32_t sentMs; };
@@ -165,6 +166,7 @@ private:
     uint32_t tag_;
     uint32_t epoch_;
     TerminalStats stats_;
+    char failureReason_[160];
 };
 
 

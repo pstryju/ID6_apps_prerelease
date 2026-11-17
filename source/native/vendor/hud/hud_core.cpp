@@ -52,6 +52,7 @@ Core::Core(const Config& cfg)
       nextCall_(0), batchStartMs_(0), recent_(cfg.replyMs), tag_(1), epoch_(0) {
     if (cfg_.maxInFlight == 0) cfg_.maxInFlight = 1;
     memset(&stats_, 0, sizeof(stats_));
+    failureReason_[0]=0;
 }
 
 void Core::dropWork(uint32_t now) {
@@ -95,6 +96,7 @@ void Core::refresh(const char* why, uint32_t now) {
 }
 
 void Core::fail(const char* why, uint32_t now) {
+    snprintf(failureReason_,sizeof failureReason_,"%s",why);
     printf("[HudTerm] FAILED: %s\n", why);
     failed_ = true;
     refresh(why, now);
@@ -301,6 +303,7 @@ void Core::onAnswer(const most::View& m, uint32_t now) {
     size_t i = 0;
     while (i < inFlight_.size() && !(inFlight_[i].fkt == m.fkt && (!byHandle || inFlight_[i].handle == h))) ++i;
     bool matched = i < inFlight_.size();
+    if(matched&&!byHandle)h=inFlight_[i].handle;
     if (matched) inFlight_.erase(inFlight_.begin() + i);
     if (error && !matched && takeDropped(m.fkt, byHandle, h, now)) {
         ++stats_.lateErrors;
@@ -311,8 +314,8 @@ void Core::onAnswer(const most::View& m, uint32_t now) {
     if (error) {
         ++stats_.errors;
         char why[160];
-        int n = snprintf(why, sizeof(why), "%s(%X) to %03X %s%s, payload", most::opName(m.op), m.op, m.fkt, fktName(m.fkt),
-                         matched ? "" : " (matches no call in flight)");
+        int n = snprintf(why, sizeof(why), "%03X handle %u: %s(%X) %s%s, payload", m.fkt,h,
+                         most::opName(m.op),m.op,fktName(m.fkt),matched ? "" : " (unmatched)");
         for (size_t k = 0; k < m.len && k < 12 && n < (int)sizeof(why) - 4; ++k)
             n += snprintf(why + n, sizeof(why) - n, " %02x", m.data[k]);
         fail(why, now);

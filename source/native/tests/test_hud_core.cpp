@@ -21,8 +21,8 @@ int main(){
             const hudterm::Call& c=graph.calls[i];assert(hudterm::callOk(c,graphics.handles));
             assert(c.handle()==back||c.handle()==1||c.handle()==2||(c.fkt==hudterm::kSwitchVisibility&&c.handle()==front));
             if(c.fkt==hudterm::kAddPolygon){
-                assert(!swapped&&c.payload[5]==2);
-                assert(hudterm::rdBe16(&c.payload[12])==30);
+                assert(!swapped&&c.payload[5]==4&&c.payload[4]==hudterm::kPolygon);
+                assert(hudterm::rdBe16(&c.payload[12])==(hudterm::rdBe16(&c.payload[2])==1?30:32));
                 if(hudterm::rdBe16(&c.payload[2])==1){assert(hudterm::rdBe16(&c.payload[10])==58);fill=true;}
             }
             if(c.fkt==hudterm::kSwitchVisibility){assert(fill);assert(c.handle()==front&&hudterm::rdBe16(&c.payload[2])==back);swapped=true;}
@@ -41,6 +41,12 @@ int main(){
         assert(renderer.submit(graph,100)==hudterm::kQueued);assert(renderer.next(100,packet));
         renderer.setExternalIdle(false,101);assert(!renderer.next(101,packet)&&!renderer.busy());
     }
+    hudterm::Core refused(graphics);most::Msg command;
+    refused.setLink(true,0x2001,1);refused.setHost(0x0101,1);
+    assert(refused.submit(evo_hud::rpmGraph(1000,6,true),2)==hudterm::kQueued&&refused.next(2,command));
+    most::View error=view(0x0101,0x2001,command.fkt,0x09,command.data);refused.onMessage(error,3);
+    assert(refused.status()==hudterm::kFailed&&strstr(refused.failureReason(),"220 handle 5"));
+    assert(!refused.next(4,command)); // never continue blindly after a rejected graphics command
     HudLifecycle life;
     life.request(true);assert(life.canRun());
     life.request(false);life.reaped(true);assert(!life.canRun());

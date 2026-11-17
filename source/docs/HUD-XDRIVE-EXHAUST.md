@@ -9,6 +9,21 @@ HU restart. The exact cause of the restart is not established.
 
 ### Current graphical candidate: RPM line
 
+Owner feedback on the first line build: enabling it immediately produced
+"HUD profile/error: overlay stopped", with no drawing. That build's command
+sequence has not been validated on the windshield terminal. The updated
+candidate replaces line-colour/line-width/two-point polyline commands with
+filled four-point strips and ImageSetFillColor, matching the packaged
+reference renderer's primitive type. This is a candidate correction, not a
+confirmed diagnosis of the observed refusal.
+
+Renderer status is now versioned HUS2 and carries the exact terminal failure
+reason. The plugin shows function, handle and error reply (or timeout), rather
+than only a generic profile/error message. Install plugin and worker together.
+If the first image-clear call on handle 5 is rejected, changing polygon style
+cannot fix it; the next step is identifying the actual instance/profile.
+No automatic reset, handle sweep or instance creation is attempted.
+
 The latest renderer draws a thin baseline and a thick active segment, 0–8000
 RPM from CDS, instead of numeric RPM text. It uses the packaged reference
 renderer’s image buffers 5/6, drawing to the inactive image and switching only
@@ -19,7 +34,7 @@ first graphic frame. There is no boost, new instance creation or autoactivation.
 The reference ELF `.local/hud-reference/hud-shape-qnx` contains draw() at
 0x1047c8 selecting image 5/6 and SwitchVisibility at 0x104eec; its tachBand()
 uses x=0..116. The candidate straight line uses that width at y=30, inside
-the reference band footprint. Line widths are 1/5; palette role 4 is a candidate
+the reference band footprint. Strip heights are 1/5; palette role 4 is a candidate
 foreground, not a guaranteed physical colour on this windshield. Geometry,
 placement, readability and cold-start availability need a parked target check.
 
