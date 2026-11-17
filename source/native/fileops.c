@@ -13,10 +13,22 @@ int main(int argc, char **argv)
     if (argc == 3 && strcmp(argv[1], "receive") == 0) return evo_receive(argv[2]);
     if (argc == 4 && strcmp(argv[1], "verify") == 0) return evo_verify(argv[2],argv[3]);
     if (argc == 4 && strcmp(argv[1], "text") == 0) {
-        char value[128],extra;int count;FILE *file=fopen(argv[2],"r");
+        unsigned char value[128];size_t n,start=0,end,i;int extra,error;
+        FILE *file=fopen(argv[2],"rb");
         if(!file){perror(argv[2]);return 1;}
-        count=fscanf(file,"%127s %c",value,&extra);fclose(file);
-        if(count!=1||strcmp(value,argv[3])){fprintf(stderr,"Text value mismatch: %s\n",argv[2]);return 1;}
+        /* Read bytes instead of relying on the target libc's multi-conversion
+         * scanf/EOF behavior. Only surrounding ASCII whitespace is ignored. */
+        n=fread(value,1,sizeof value,file);extra=fgetc(file);error=ferror(file);fclose(file);
+        if(error){fprintf(stderr,"Could not read text: %s\n",argv[2]);return 1;}
+        end=n;
+        while(start<end&&(value[start]==' '||(value[start]>=9&&value[start]<=13)))++start;
+        while(end>start&&(value[end-1]==' '||(value[end-1]>=9&&value[end-1]<=13)))--end;
+        if(extra!=EOF||end-start!=strlen(argv[3])||memcmp(value+start,argv[3],end-start)){
+            fprintf(stderr,"Text value mismatch: %s; expected '%s'; actual bytes (%lu%s):",
+                    argv[2],argv[3],(unsigned long)n,extra==EOF?"":"+");
+            for(i=0;i<n&&i<32;++i)fprintf(stderr," %02X",(unsigned)value[i]);
+            fputc('\n',stderr);return 1;
+        }
         return 0;
     }
 

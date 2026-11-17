@@ -68,5 +68,18 @@ class BundleTest(unittest.TestCase):
         path.write_bytes(b'NBTevo_Y24073J\r\nother')
         self.assertNotEqual(subprocess.run(command,capture_output=True).returncode,0)
 
+    def test_text_match_is_bounded_exact_and_reports_observed_bytes(self):
+        path=self.root/'firmware'
+        command=[str(self.helper),'text',str(path),'NBTevo_Y24073J']
+        for data in (b'NBTevo_Y24073J',b'NBTevo_Y24073J\n',b' \tNBTevo_Y24073J\r\n'):
+            path.write_bytes(data)
+            self.assertEqual(subprocess.run(command,capture_output=True).returncode,0)
+        for data in (b'',b'NBTevo_N18032I\n',b'NBTevo_Y24073J\0',
+                     b'NBTevo_Y24073J trailing',b'NBTevo_Y24073J'+b' '*128):
+            path.write_bytes(data)
+            result=subprocess.run(command,capture_output=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn(b"expected 'NBTevo_Y24073J'; actual bytes",result.stderr)
+
 
 if __name__=='__main__': unittest.main()
