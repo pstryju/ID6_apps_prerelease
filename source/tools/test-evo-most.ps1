@@ -13,7 +13,7 @@ $argument=if($ExhaustInfo){' --exhaust-info'}elseif($EngineInfo){' --engine-info
 $commands=@('set -e',(Get-EvoFrameworkChecks "$run/fileops"),"chmod 755 '$run/most-probe-qnx'",
     "LD_LIBRARY_PATH=/lib:/usr/lib:/boot/lib:/opt/sys/lib '$run/most-probe-qnx'$argument 2>&1 || true",'echo EVO_PROBE_COMPLETE')
 $entries=@(@{name='most-probe-qnx';bytes=[IO.File]::ReadAllBytes($probe)},
-    @{name='deploy.sh';bytes=[Text.Encoding]::UTF8.GetBytes(($commands -join "`n")+"`n")})
+    @{name='deploy.sh';bytes=[Text.Encoding]::UTF8.GetBytes((($commands -join "`n")+"`n").Replace("`r`n","`n").Replace("`r","`n"))})
 $payload=New-EvoBundle -Helper $helper -Entries $entries
 Initialize-EvoConnection -Head $Head -Password $Password
 $result=Invoke-Evo -Command (Get-EvoBatchBootstrap -Run $run -Helper $helper) -InputBytes $payload -StreamText -Activity 'MOST: ograniczone odczyty DME, bez instalacji aplikacji i restartu'

@@ -49,7 +49,7 @@ function New-EvoBundle([string]$Helper, [object[]]$Entries) {
 function Get-EvoBatchBootstrap([string]$Run,[string]$Helper) {
     $length=(Get-Item -LiteralPath $Helper).Length
     $hash=Get-BytesHash ([IO.File]::ReadAllBytes($Helper))
-    return @"
+    $bootstrap=@"
 set -e
 test ! -L '$script:Runs'
 test ! -e '$Run'
@@ -61,15 +61,19 @@ chmod 700 '$Run/fileops'
 '$Run/fileops' receive '$Run'
 sh '$Run/deploy.sh'
 "@
+    return $bootstrap.Replace("`r`n","`n").Replace("`r","`n")
 }
 
 function Get-EvoFrameworkChecks([string]$Helper) {
-    return @"
+    $checks=@"
 echo 'Checking target firmware and framework fingerprints'
 '$Helper' text /opt/sys/etc/nbt_version.txt NBTevo_Y24073J
 '$Helper' verify /opt/hmi/ID5/lib/libAppFramework.A.so ef2488b007d592301d8f21d9aa60771ad552d06b5e97c29e7813e3946644d820
 '$Helper' verify /opt/hmi/ID5/lib/libCoreFramework.A.so cb0e488d1ebe2e30de87bb56f0e93d6a2d76b44309b0b47fef5b0b7cec048973
 "@
+    # Embedded in uploaded scripts, not just the SSH command argument. A CR
+    # after the unquoted firmware token becomes part of argv on QNX.
+    return $checks.Replace("`r`n","`n").Replace("`r","`n")
 }
 
 function Get-EvoInstallScript([string]$Run,[object[]]$Items) {

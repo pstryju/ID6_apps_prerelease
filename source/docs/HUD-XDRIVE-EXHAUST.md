@@ -152,3 +152,13 @@ job does not exist; a positive read is not proof that 2F control is supported.
 Next evidence needed is the actual DME variant and a matching diagnostic job
 definition, or an authorized capture of working BimmerLink control on this car.
 No unverified open/close commands or permanent override service were enabled.
+
+### Parked MOST identification, 2026-11-17
+
+The complete ExhaustInfo script ran successfully after normalizing CRLF in
+the uploaded deploy.sh (not only in the SSH command). Firmware and both target
+framework hashes matched. DME F150 returned `62F1500F1810`; F187, F189 and
+60FD each returned `7F2231`. MOST open/close succeeded. These are actual
+read-only target results; no actuation, ECU write or session change was sent.
+The 60FD read rejection does not establish that every possible flap-control
+service is unavailable. Raw logs remain private in `.local/diagnostics`.

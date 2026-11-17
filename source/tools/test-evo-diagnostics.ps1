@@ -23,7 +23,7 @@ foreach($gateway in $Gateways){
 }
 $commands+='echo EVO_PROBE_COMPLETE'
 $entries=@(@{name='diagnostic-probe-qnx';bytes=[IO.File]::ReadAllBytes($probe)},
-    @{name='deploy.sh';bytes=[Text.Encoding]::UTF8.GetBytes(($commands -join "`n")+"`n")})
+    @{name='deploy.sh';bytes=[Text.Encoding]::UTF8.GetBytes((($commands -join "`n")+"`n").Replace("`r`n","`n").Replace("`r","`n"))})
 $payload=New-EvoBundle -Helper $helper -Entries $entries
 Initialize-EvoConnection -Head $Head -Password $Password
 $result=Invoke-Evo -Command (Get-EvoBatchBootstrap -Run $run -Helper $helper) -InputBytes $payload -StreamText -Activity 'Jedna sesja: tylko odczyt RPM, predkosci i temperatury przez wskazane bramki'

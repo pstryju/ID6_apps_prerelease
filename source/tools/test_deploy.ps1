@@ -121,6 +121,18 @@ foreach ($mode in @('install','uninstall')) {
 }
 Write-Host 'Generated .local/deploy-tests/{install,uninstall}.sh; run native/tests/test_deploy.py in the host-test container.'
 . "$PSScriptRoot/EvoBatch.ps1"
+# Reproduce a Windows CRLF checkout: framework checks are embedded in a
+# binary-uploaded deploy.sh and never pass through Invoke-Evo normalization.
+$batchSource=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'EvoBatch.ps1'))
+$crlfBatch=Join-Path $folder 'EvoBatch-crlf.ps1'
+[IO.File]::WriteAllText($crlfBatch,$batchSource.Replace("`r`n","`n").Replace("`n","`r`n"))
+. $crlfBatch
+$frameworkChecks=Get-EvoFrameworkChecks '/EVO_TEST/fileops'
+if($frameworkChecks.Contains("`r")){throw 'Framework checks leaked CR into an uploaded script.'}
+$probeScript=(@('set -e',$frameworkChecks,'echo EVO_PROBE_COMPLETE') -join "`n")+"`n"
+[byte[]]$probeBytes=[Text.Encoding]::UTF8.GetBytes($probeScript)
+if(13 -in $probeBytes){throw 'Uploaded probe script contains a carriage return.'}
+Write-Host 'CRLF checkout: embedded framework checks and uploaded probe script contain LF only.'
 # Bootstrap fixtures use a dummy helper prefix; Linux tests replace it with
 # the compiled native host helper before running the actual generated scripts.
 function Get-EvoFrameworkChecks([string]$Helper) { return "echo 'Fixture target verification'" }
