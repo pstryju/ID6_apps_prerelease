@@ -81,5 +81,7 @@ workers. The shared extracted DID profiles remain in `src/profiles/`.
 `plugin/BoostDeck-EvoY.xml` matches the candidate renderer. The dashboard
 staging script selects it explicitly, then applies the stock background and
 removes manual unit actions. `plugin/BoostDeck.xml` belongs to the updated
-upstream renderer. Packaged upstream apps are not automatically added to the
-Evo Y installer.
+upstream renderer. LaunchDeck, RoadJet and BEAMer are also cross-built against the local Evo Y
+frameworks and staged with their matching upstream image archives. Select them
+using `Install-Evo.cmd -AppSet Activities` or individual `-Apps` names. Their
+upstream diagnostic paths remain unchanged; they do not use the CDS gauge feed.

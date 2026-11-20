@@ -25,6 +25,18 @@ for item in BoostDeck:plugin ShiftDeck:shift_deck EngineCodes:engine_codes; do
         -Wl,--allow-shlib-undefined "-Wl,-soname,lib$app.so" -o "$out/lib$app.so"
 done
 most="src/most/dsi_bind.c src/most/dsi_client.c src/most/most_link.c src/most/most_proto.c"
+cxx -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/light_show.cpp \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libBEAMer.so -o "$out/libBEAMer.so"
+c -Isrc -O2 src/beamer_worker.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/beamer-qnx"
+cxx -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/road_jet.cpp "$out/core.o" \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -lm -lsocket \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libRoadJet.so -o "$out/libRoadJet.so"
+c -Isrc -O2 src/road_jet_worker.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/road-jet-qnx"
+c -Isrc -O2 -fPIC -c src/launch_timer.c -o "$out/launch_timer.o"
+cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/launch_deck.cpp "$out/core.o" "$out/launch_timer.o" \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -lm -lsocket \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libLaunchDeck.so -o "$out/libLaunchDeck.so"
 c -DNATIVE_FAST -DPERF_LAB -DBD_STOCK_DME -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/boostdeck-collector-qnx"
 c -DNATIVE_FAST -DPERF_LAB -DSHIFT_DECK_ONLY -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/shift-deck-qnx"
 c -DENGINE_CODES_ONLY -DPERF_LAB -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/engine-codes-qnx"

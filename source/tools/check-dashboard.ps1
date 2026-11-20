@@ -79,7 +79,7 @@ if(-not $hud.SelectSingleNode('//checkbox[@model="51" and @action="21"]')){$fail
 if(-not $xdrive.SelectSingleNode('//hmiState[@id="101"]//button[@action="22"]') -or
    -not $xdrive.SelectSingleNode('//hmiState[@id="102"]//button[@action="23"]')){$failures.Add('XDriveControl: confirmation screens missing')}
 if(Test-Path -LiteralPath (Join-Path $stage 'HudTest/hud-boost-most-qnx')){$failures.Add('HudTest: obsolete boost worker remains')}
-foreach($pair in @(@('HudTest','hud-display-qnx'),@('XDriveControl','xdrive-control-qnx'))){
+foreach($pair in @(@('HudTest','hud-display-qnx'),@('XDriveControl','xdrive-control-qnx'),@('LaunchDeck','shift-deck-qnx'),@('RoadJet','road-jet-qnx'),@('BEAMer','beamer-qnx'))){
     if(-not (Test-Path -LiteralPath (Join-Path $stage "$($pair[0])/$($pair[1])"))){$failures.Add("Missing optional worker: $($pair[1])")}
 }
 if (-not $codes.SelectSingleNode('//hmiState[@id="102"]//button[@action="27"]') -or

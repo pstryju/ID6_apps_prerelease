@@ -35,11 +35,11 @@ $receipt=$parts[0].Trim() | ConvertFrom-Json
 $status=$parts[1].Trim()
 if ($receipt.schema -ne 1 -or $receipt.runId -ne $RunId) { throw 'Receipt does not match this deployment.' }
 $items=@($receipt.apps)
-if (-not $items.Count -or $items.Count -gt 7) { throw 'Invalid receipt app count.' }
+if (-not $items.Count -or $items.Count -gt 10) { throw 'Invalid receipt app count.' }
 $names=@{}
 foreach ($item in $items) {
     # AbiSmoke and CdsProbe remain accepted only to restore/remove historical deployments.
-    if ($item.name -notin @('AbiSmoke','BoostDeck','ShiftDeck','EngineCodes','CdsProbe','HudTest','XDriveControl') -or $names.ContainsKey($item.name)) { throw 'Invalid app in receipt.' }
+    if ($item.name -notin @('AbiSmoke','BoostDeck','ShiftDeck','EngineCodes','CdsProbe','HudTest','XDriveControl','LaunchDeck','RoadJet','BEAMer') -or $names.ContainsKey($item.name)) { throw 'Invalid app in receipt.' }
     $names[$item.name]=$true
     if ($item.hadOriginal -isnot [bool] -or -not @($item.files).Count) { throw 'Invalid original-app record.' }
     foreach ($file in $item.files) {

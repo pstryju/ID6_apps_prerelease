@@ -38,7 +38,7 @@ foreach($app in @('AbiSmoke','CdsProbe')) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [IO.Compression.ZipFile]::OpenRead((Join-Path $root 'packages/dashboard.zip'))
 try {
-    foreach ($app in @('BoostDeck', 'ShiftDeck', 'EngineCodes', 'HudTest', 'XDriveControl')) {
+    foreach ($app in @('BoostDeck', 'ShiftDeck', 'EngineCodes', 'HudTest', 'XDriveControl', 'LaunchDeck', 'RoadJet', 'BEAMer')) {
         $folder = Join-Path $stage $app
         New-Item -ItemType Directory -Force $folder | Out-Null
         foreach ($extension in @('manifest', 'xml')) {
@@ -52,13 +52,18 @@ try {
             [BitConverter]::ToUInt16($bytes, 18) -ne 40) { throw "Invalid ARM ELF library: $library" }
         Copy-Item -LiteralPath $library -Destination $folder
         if ($app -notin @('HudTest','XDriveControl')) {
-            $entry = $archive.GetEntry("$app/${app}_ALL_Images.zip")
-            if (-not $entry) { throw "Missing image archive: $app" }
-            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $folder "${app}_ALL_Images.zip"), $true)
+            $appArchive=$archive
+            $package=switch($app){'LaunchDeck'{'launchdeck.zip'} 'RoadJet'{'road-jet.zip'} 'BEAMer'{'beamer.zip'}}
+            if($package){$appArchive=[IO.Compression.ZipFile]::OpenRead((Join-Path $root "packages/$package"))}
+            try {
+                $entry = $appArchive.GetEntry("$app/${app}_ALL_Images.zip")
+                if (-not $entry) { throw "Missing image archive: $app" }
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $folder "${app}_ALL_Images.zip"), $true)
+            } finally { if($package){$appArchive.Dispose()} }
         }
     }
 } finally { $archive.Dispose() }
-foreach ($pair in @(@('EngineCodes','engine-codes-qnx'),@('BoostDeck','boostdeck-most-qnx'),@('XDriveControl','xdrive-control-qnx'),@('HudTest','hud-display-qnx'))) {
+foreach ($pair in @(@('EngineCodes','engine-codes-qnx'),@('BoostDeck','boostdeck-most-qnx'),@('XDriveControl','xdrive-control-qnx'),@('HudTest','hud-display-qnx'),@('LaunchDeck','shift-deck-qnx'),@('RoadJet','road-jet-qnx'),@('BEAMer','beamer-qnx'))) {
     $worker = Join-Path $output $pair[1]
     $bytes = [IO.File]::ReadAllBytes($worker)
     if ([BitConverter]::ToUInt16($bytes,16) -ne 2 -or [BitConverter]::ToUInt16($bytes,18) -ne 40) {

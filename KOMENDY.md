@@ -16,6 +16,10 @@ cd C:\Users\pawel\Developer\ID6_apps
 | Instalacja Engine Fault Codes | `.\Install-Evo.cmd -Apps EngineCodes` |
 | Instalacja HUD | `.\Install-Evo.cmd -Apps HudTest` |
 | Instalacja xDrive Control | `.\Install-Evo.cmd -Apps XDriveControl` |
+| Instalacja LaunchDeck, Road Jet i BEAMer | `.\Install-Evo.cmd -AppSet Activities` |
+| Instalacja LaunchDeck | `.\Install-Evo.cmd -Apps LaunchDeck` |
+| Instalacja Road Jet | `.\Install-Evo.cmd -Apps RoadJet` |
+| Instalacja BEAMer | `.\Install-Evo.cmd -Apps BEAMer` |
 | Przywrócenie wersji sprzed ostatniej instalacji | `.\Uninstall-Evo.cmd` |
 | Podgląd instalacji bez łączenia z autem | `.\Install-Evo.cmd -WhatIf` |
 | Usunięcie starych AbiSmoke/CdsProbe | `.\Remove-Evo-Tests.cmd` |
@@ -44,7 +48,8 @@ Instalator sprawdza kompletność plików i sumy SHA-256 — najpierw wykonaj bu
 | `Gauges` — domyślny | BoostDeck, ShiftDeck |
 | `Core` | ShiftDeck, EngineCodes |
 | `All` | BoostDeck, ShiftDeck, EngineCodes |
-| `Extras` | HudTest, XDriveControl |
+| `Extras` | HudTest, XDriveControl, LaunchDeck, RoadJet, BEAMer |
+| `Activities` | LaunchDeck, RoadJet, BEAMer |
 
 `All` nie obejmuje `Extras`. Parametr `-Apps` ma pierwszeństwo przed zestawem.
 Instalacja xDrive dodaje menu, ale nie przełącza napędu. HUD jest domyślnie
@@ -184,3 +189,15 @@ Plugins. Hasła nie wpisuj w argumenty komendy.
 Więcej informacji: [testy w aucie](TESTY-W-AUCIE.md),
 [BoostDeck MOST](source/docs/BOOSTDECK-MOST.md),
 [HUD, xDrive i wydech](source/docs/HUD-XDRIVE-EXHAUST.md).
+
+LaunchDeck, Road Jet i BEAMer są budowane z lokalnymi bibliotekami Evo.
+`Activities` dodaje tylko ich menu; BEAMer zaczyna sekwencję dopiero po
+wybraniu jej w aplikacji i sprawdzeniu obsługiwanego modułu, P oraz postoju.
+Nowe aplikacje korzystają z diagnostyki HSFZ/MOST według kodu upstream,
+a nie z naszego źródła CDS. MOST adresuje tylko DME: nie zastępuje odczytu
+kąta kierownicy z ICM ani sterowania światłami przez FEM. Nie są jeszcze
+sprawdzone na tym aucie.
+
+Po instalacji zestawu `Activities`, `.\Uninstall-Evo.cmd` przywraca stan
+sprzed tej instalacji wszystkich trzech aplikacji. Wyniki LaunchDeck i jego
+preferencje są przechowywane poza folderem Plugins i pozostają po deinstalacji.

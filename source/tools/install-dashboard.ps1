@@ -1,9 +1,9 @@
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
     [string]$Head = '169.254.199.119',
-    [ValidateSet('BoostDeck','ShiftDeck','EngineCodes','HudTest','XDriveControl')]
+    [ValidateSet('BoostDeck','ShiftDeck','EngineCodes','HudTest','XDriveControl','LaunchDeck','RoadJet','BEAMer')]
     [string[]]$Apps = @('BoostDeck','ShiftDeck'),
-    [ValidateSet('Core','All','Gauges','Extras')][string]$AppSet = 'Gauges',
+    [ValidateSet('Core','All','Gauges','Extras','Activities')][string]$AppSet = 'Gauges',
     [switch]$Parked,
     [switch]$Legacy,
     [string]$IdentityFile,
@@ -17,7 +17,8 @@ param(
 if (-not $PSBoundParameters.ContainsKey('Apps')) {
     $Apps = switch ($AppSet) {
         'Gauges' { @('BoostDeck','ShiftDeck') }
-        'Extras' { @('HudTest','XDriveControl') }
+        'Extras' { @('HudTest','XDriveControl','LaunchDeck','RoadJet','BEAMer') }
+        'Activities' { @('LaunchDeck','RoadJet','BEAMer') }
         'Core' { @('ShiftDeck','EngineCodes') }
         'All' { @('BoostDeck','ShiftDeck','EngineCodes') }
     }
@@ -53,9 +54,12 @@ foreach ($app in $Apps) {
             'BoostDeck' { 'boostdeck-most-qnx' }
             'ShiftDeck' { 'shift-deck-qnx' }
             'EngineCodes' { 'engine-codes-qnx' }
+            'LaunchDeck' { 'shift-deck-qnx' }
+            'RoadJet' { 'road-jet-qnx' }
+            'BEAMer' { 'beamer-qnx' }
         }
         $expectedNames += @("${app}_ALL_Images.zip")
-        if($app -in @('BoostDeck','EngineCodes')){$expectedNames += $worker}
+        if($app -in @('BoostDeck','EngineCodes','LaunchDeck','RoadJet','BEAMer')){$expectedNames += $worker}
     }
     if($app -eq 'HudTest'){$expectedNames+=@('hud-display-qnx','LICENSE.txt','NOTICE.txt')}
     if($app -eq 'XDriveControl'){$expectedNames+=@('xdrive-control-qnx','LICENSE.txt')}
@@ -68,7 +72,7 @@ $gatewayAddress=$null
 if (-not [Net.IPAddress]::TryParse($Gateway,[ref]$gatewayAddress) -or $gatewayAddress.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) { throw 'Gateway must be an IPv4 address.' }
 $Gateway=$gatewayAddress.ToString()
 Write-Host "Apps: $($Apps -join ', '). Two SSH sessions; no automatic restart."
-if('EngineCodes' -in $Apps -or 'XDriveControl' -in $Apps){Write-Host "Diagnostic gateway: $Gateway"}
+if(@($Apps | Where-Object {$_ -in @('EngineCodes','XDriveControl','LaunchDeck','RoadJet','BEAMer')}).Count){Write-Host "Diagnostic gateway: $Gateway"}
 if('BoostDeck' -in $Apps){Write-Host "Engine profile: $EngineProfile (B48/N13 mappings await validation)"}
 if (-not $PSCmdlet.ShouldProcess($Head, "Install $($Apps -join ', ') using one verified bundle")) { return }
 if (-not $Parked -and (Read-Host 'Auto stoi, iDrive jest wlaczone? Wpisz TAK, aby kontynuowac') -cne 'TAK') { throw 'Installation cancelled.' }
@@ -99,7 +103,7 @@ foreach ($item in $items) {
     foreach ($file in $item.files) {
         $entries+=@{name="stage/$($item.name)/$($file.name)"; bytes=[IO.File]::ReadAllBytes((Join-Path $candidate "$($item.name)/$($file.name)"))}
     }
-    if ($item.name -in @('EngineCodes','XDriveControl')) {
+    if ($item.name -in @('EngineCodes','XDriveControl','LaunchDeck','RoadJet','BEAMer')) {
         $bytes=[Text.Encoding]::ASCII.GetBytes($Gateway+"`n")
         $item.files+=@{name='gateway-ip.txt';sha256=(Get-BytesHash $bytes)}
         $entries+=@{name="stage/$($item.name)/gateway-ip.txt";bytes=$bytes}
