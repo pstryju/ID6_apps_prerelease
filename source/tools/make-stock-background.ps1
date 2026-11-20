@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$OutputPath)
+param([Parameter(Mandatory=$true)][string]$OutputPath,[switch]$NoCaptions)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing
 # Reconstruct the RHMI cards from geometry and text; no packaged bitmap input.
@@ -24,7 +24,7 @@ try {
             $path.AddArc($x,$y+$h-32,32,32,90,90)
             $path.CloseFigure()
             $graphics.FillPath($fill,$path)
-            $graphics.DrawString($title,$type,$ink,[single]($x+14),[single]($y+17))
+            if(-not $NoCaptions){$graphics.DrawString($title,$type,$ink,[single]($x+14),[single]($y+17))}
         } finally{$path.Dispose()}
     }
     $null=[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($OutputPath)))

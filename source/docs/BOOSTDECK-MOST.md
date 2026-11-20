@@ -106,3 +106,31 @@ The N20 query/decoder table now lives in `native/src/profiles/n20.inc` and is
 used by BoostDeck; the HUD repair candidate is CDS RPM-only. The installer keeps explicit `n20` by default;
 experimental `auto` and the unfilled B48/N13 entries are described in
 [ENGINE-PROFILES.md](ENGINE-PROFILES.md).
+
+## Configurable nine-tile Evo Y build
+
+The current candidate exposes OPTIONS -> Configure gauges -> Gauge 1..9.
+Each position selects a signal independently, including repeated signals.
+Gasoline and Diesel have separate persistent layouts in
+`/var/opt/hmi/data/ID5/BoostDeck.signals`; selection and color survive replacing
+the plugin folder. Default gasoline tiles retain boost, AFR, timing, intake air,
+RPM, rail pressure, oil pressure, coolant and oil temperature.
+
+The configurable plugin and MOST worker use NBG7 with distinct oil-temperature
+and ethanol slots. They must be deployed together. The worker polls only the
+selected diagnostic channels. It retains the extracted N20 DID definitions,
+OBD rail pressure and the independent ambient/charge subtraction for boost.
+Additional standard OBD choices use Mode 01 and remain blank after rejection or
+invalid data; the menu does not establish support on this engine.
+
+RPM, speed, coolant, oil temperature, accelerator-pedal position and exterior
+temperature use CDS exclusively. Fuel level uses its percentage PID: CDS tank
+content in litres is not a percentage. Temperature and speed units are read
+independently from Evo; pressures keep bar/kPa. Missing unit data leaves the
+corresponding value blank. Transmission temperature and active ethanol are not
+available through this DME tunnel and remain blank if selected.
+
+Diesel skips gasoline-specific BMW DIDs, using standard OBD intake temperature,
+rail pressure and MAP minus barometer for boost. This is a candidate profile,
+not validation on a DDE. The engine-profile.txt mapping guard remains in force.
+No new vehicle calibration or runtime validation is claimed by host tests.

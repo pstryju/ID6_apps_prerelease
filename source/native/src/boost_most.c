@@ -5,6 +5,9 @@
 #include "diagnostic_lease.h"
 #include "gauge_core.h"
 #include "engine_profiles.h"
+#ifdef BD_CONFIGURABLE
+#include "boost_obd.h"
+#endif
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -46,13 +49,21 @@ int main(int argc,char** argv){
     uint64_t due[BD_PROFILE_MAX_READS]={0},observed[BD_COUNT]={0},ambient_at=0;
     unsigned udp_port=BD_UDP_PORT,cycles=0,iteration=0,i;int session=0,trace=0,sock,exit_code=0;
     pid_t parent=getppid();struct sockaddr_in dest;bd_frame frame;double ambient=0;int have_ambient=0;
+#ifdef BD_CONFIGURABLE
+    unsigned selected_signals=111;int diesel=0;
+    uint64_t obd_due[BD_BOOST_OBD_COUNT]={0};
+#endif
     for(i=1;i<(unsigned)argc;++i){
         if(!strcmp(argv[i],"--session"))session=1;
+#ifdef BD_CONFIGURABLE
+        else if(!strcmp(argv[i],"--diesel"))diesel=1;
+        else if(!strcmp(argv[i],"--signals")&&i+1<(unsigned)argc&&argument_number(argv[i+1],1,(1u<<BD_COUNT)-1,&selected_signals))++i;
+#endif
         else if(!strcmp(argv[i],"--trace"))trace=1;
         else if(!strcmp(argv[i],"--profile")&&i+1<(unsigned)argc&&!selected)selected=argv[++i];
         else if(!strcmp(argv[i],"--udp-port")&&i+1<(unsigned)argc&&argument_number(argv[i+1],1,65535,&udp_port))++i;
         else if(!strcmp(argv[i],"--cycles")&&i+1<(unsigned)argc&&argument_number(argv[i+1],1,100000,&cycles))++i;
-        else {fputs("Usage: boostdeck-most-qnx [--profile n20|b48|n13|auto] [--session] [--trace] [--cycles N] [--udp-port N]\n",stderr);return 2;}
+        else {fputs("Usage: boostdeck-most-qnx [--profile n20|b48|n13|auto] [--session] [--trace] [--cycles N] [--udp-port N] (configurable build: [--signals MASK] [--diesel])\n",stderr);return 2;}
     }
     if(!selected){if(!bd_engine_profile_setting(argv[0],setting)){fputs("Invalid engine-profile.txt\n",stderr);return 2;}selected=setting;}
     if(strcmp(selected,"auto")){
@@ -85,6 +96,9 @@ int main(int argc,char** argv){
         for(i=0;i<profile->count&&running;++i){
             const bd_profile_read* read=&profile->reads[i];
             const bd_signal* signal=&read->signal;
+#ifdef BD_CONFIGURABLE
+            if(diesel || !(selected_signals & (1u<<(read->slot==BD_COUNT?BD_BOOST:read->slot))))continue;
+#endif
 #ifdef BD_HUD_SOURCE
             if(read->slot!=BD_COUNT&&read->slot!=BD_BOOST)continue;
 #endif
@@ -119,6 +133,31 @@ int main(int argc,char** argv){
             if(!have_ambient||now-ambient_at>=1800)frame.valid&=~(1u<<BD_BOOST);
             publish(sock,&dest,&frame,observed); // a slow channel never delays publication of the last boost
         }
+#ifdef BD_CONFIGURABLE
+        for(i=0;i<BD_BOOST_OBD_COUNT&&running;++i){
+            const unsigned slot=bd_boost_obd[i].slot;
+            const unsigned wanted=selected_signals | (diesel&&(selected_signals&(1u<<BD_BOOST))?(1u<<BD_BARO):0);
+            unsigned char request[]={1,(unsigned char)bd_boost_obd[i].pid},reply[64];
+            size_t n=0;enum most_rc rc;double value=0;int lock,ok;
+            uint64_t now=bd_mono_ms();
+            if(!(wanted&(1u<<slot)) || (bd_boost_obd[i].diesel_only&&!diesel) || now<obd_due[i])continue;
+            lock=reserve_gateway();if(lock<0)continue;
+            rc=most_request_wait(0x12,request,2,reply,sizeof reply,&n,2000);close(lock);
+            now=bd_mono_ms();obd_due[i]=now+2000;
+            if(rc==MOST_CLOSED){exit_code=1;running=0;break;}
+            ok=rc==MOST_REPLY&&n>=2&&reply[0]==0x41&&reply[1]==request[1]&&
+                bd_decode_obd(request[1],reply+2,n-2,&value);
+            frame.valid&=~(1u<<slot);
+            if(diesel&&slot==BD_BARO&&!ok)frame.valid&=~(1u<<BD_BOOST);
+            if(slot==BD_BOOST){
+                ok=ok&&(frame.valid&(1u<<BD_BARO))&&now>=observed[BD_BARO]&&now-observed[BD_BARO]<BD_TEMP_STALE_MS;
+                value=(value-frame.value[BD_BARO])*.145037738;
+            }
+            if(ok){frame.value[slot]=value;observed[slot]=now;frame.valid|=1u<<slot;}
+            if(trace)fprintf(stderr,"MOST PID %02X valid=%d value=%.6f\n",request[1],ok,value);
+            publish(sock,&dest,&frame,observed);
+        }
+#endif
         publish(sock,&dest,&frame,observed);++iteration;
         if(running)poll(0,0,20);
     }

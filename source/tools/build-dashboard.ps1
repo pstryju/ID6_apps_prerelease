@@ -42,7 +42,7 @@ try {
         $folder = Join-Path $stage $app
         New-Item -ItemType Directory -Force $folder | Out-Null
         foreach ($extension in @('manifest', 'xml')) {
-            $resource=if($app -eq 'BoostDeck' -and $extension -eq 'xml'){'plugin/BoostDeck-EvoY.xml'}else{"plugin/$app.$extension"}
+            $resource="plugin/$app.$extension"
             Copy-Item -LiteralPath (Join-Path $native $resource) -Destination (Join-Path $folder "$app.$extension")
         }
         $library = Join-Path $output "lib$app.so"
@@ -84,18 +84,13 @@ Copy-Item -LiteralPath (Join-Path $root 'source/third-party/hud-NOTICE.txt') -De
 $xdriveLicense=[IO.File]::ReadAllText((Join-Path $root 'source/LICENSE'))+"`n`n"+[IO.File]::ReadAllText((Join-Path $root 'source/third-party/idrive7-apps-LICENSE'))
 [IO.File]::WriteAllText((Join-Path $stage 'XDriveControl/LICENSE.txt'),$xdriveLicense)
 $background=Join-Path $output 'stock-background.png'
-& "$PSScriptRoot/make-stock-background.ps1" -OutputPath $background
+& "$PSScriptRoot/make-stock-background.ps1" -OutputPath $background -NoCaptions
 $imagesPath=Join-Path $stage 'BoostDeck/BoostDeck_ALL_Images.zip'
 $images=[IO.Compression.ZipFile]::Open($imagesPath,[IO.Compression.ZipArchiveMode]::Update)
 try {
     $images.GetEntry('56300.png').Delete()
     $null=[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($images,$background,'56300.png',[IO.Compression.CompressionLevel]::Optimal)
 } finally{$images.Dispose()}
-$xmlPath=Join-Path $stage 'BoostDeck/BoostDeck.xml'
-[xml]$layout=[IO.File]::ReadAllText($xmlPath)
-$layout.SelectSingleNode('//label[@id="158"]/properties/property[@id="20"]').SetAttribute('value','1060')
-$layout.SelectSingleNode('//label[@id="158"]/properties/property[@id="9"]').SetAttribute('value','132')
-$layout.Save($xmlPath)
 # The reference XML retains manual units; this CDS candidate follows Evo.
 foreach($app in @('BoostDeck','ShiftDeck')) {
     $path=Join-Path $stage "$app/$app.xml"

@@ -7,7 +7,7 @@
 static void report(void){
     fprintf(stderr,"FAKE_MOST_CLOSE target=%d client=%d free=%d\n",fake_dsi_req_count(5),fake_dsi_req_count(0x10),fake_free_calls);
     fprintf(stderr,"FAKE_MOST_REQUESTS ");
-    {const char* requests[]={"224201","224205","225889","224A49","22580F","22586F","0123","2256D7","22DA12","22F150","22F187","22F189","14","2F","10"};unsigned i;
+    {const char* requests[]={"224201","224205","225889","224A49","22580F","22586F","0123","0142","0133","010B","010C","010D","0105","015C","2256D7","22DA12","22F150","22F187","22F189","14","2F","10"};unsigned i;
      for(i=0;i<sizeof requests/sizeof requests[0];++i)fprintf(stderr,"%s=%d ",requests[i],fake_dme_count(requests[i]));}
     fputc('\n',stderr);
 }
@@ -21,6 +21,12 @@ int most_fake_bind(void){
     fake_dme_plain(0x5889,afr,sizeof afr);fake_dme_plain(0x4a49,timing,sizeof timing);
     fake_dme_plain(0x580f,iat,sizeof iat);fake_dme_plain(0x586f,oil,sizeof oil);
     fake_dme_raw("0123",rail,sizeof rail);
+    {static const unsigned char voltage[]={0x41,0x42,0x37,0x78};
+     static const unsigned char baro[]={0x41,0x33,100},map[]={0x41,0x0b,150};
+     fake_dme_raw("0142",voltage,sizeof voltage);
+     fake_dme_raw("0133",baro,sizeof baro);fake_dme_raw("010B",map,sizeof map);}
+    if(!strcmp(mode,"reject-baro"))fake_dme_refuse("0133",0x31,0);
+    if(!strcmp(mode,"reject-voltage"))fake_dme_refuse("0142",0x31,0);
     if(!strcmp(mode,"auto-n20")||!strcmp(mode,"auto-conflict"))fake_dme_plain(0xf150,(const unsigned char*)"N20B20O0",8);
     if(!strcmp(mode,"auto-b48"))fake_dme_plain(0xf150,(const unsigned char*)"B48B20",6);
     if(!strcmp(mode,"auto-conflict"))fake_dme_plain(0xf187,(const unsigned char*)"N13B16",6);

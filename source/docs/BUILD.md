@@ -63,25 +63,25 @@ Inspect the report's limitations. The tool checks required imports, function ins
 
 Set `NBTAAD_SOURCE` to the absolute path of `milestone-7/src` from the licensed [NBT-AAD reference source](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/tree/f97f1a34bdf68f1861862bd6361a2918949a48f2/milestone-7). Run `sh native/build.sh` to produce the optional HUD library and worker. HUD retains the original 6WA handle map and factory-navigation ownership checks. The rebuilt worker accepts a configured gateway IPv4 address. A cluster that rejects the reference handles still requires a parked HUD protocol capture for porting.
 
-## Evo Y candidate versus upstream gauges
+## Evo Y candidate and configurable BoostDeck
 
-`tools/build-dashboard.ps1` remains the local Evo Y build. It defines
-`BD_STOCK_DME` and `BD_NATIVE_CDS`, keeps ShiftDeck on CDS and BoostDeck on
-its dedicated MOST worker plus CDS, and reads units from Evo. It does not
-install the upstream selectable-signal UI or replace the quarantined HUD trace.
+`tools/build-dashboard.ps1` builds against the local Evo Y frameworks. ShiftDeck
+remains CDS-only. BoostDeck now uses the upstream nine-tile configuration UI,
+with a dedicated MOST-only N20-profile worker and CDS channels. Both read units
+from Evo; manual unit actions are removed during staging.
 
-The upstream BoostDeck now uses selectable channels and NBG7 frames. Its
-NBG5 format means eleven fields, whereas this fork's validated stock NBG5
-means nine fields with oil temperature in slot 8. These are incompatible.
-`gauge_core.h`, `gauge_core.c`, `collector.c` and `plugin.cpp` select the
-preserved `evo_y_*` implementations at compile time for the candidate; ordinary
-builds use the updated upstream implementations. Never mix their plugins and
-workers. The shared extracted DID profiles remain in `src/profiles/`.
+BoostDeck's plugin, core and worker are compiled with `BD_CONFIGURABLE` and use
+NBG7. Rebuild and deploy the plugin and worker together. The historical stock
+NBG5 (nine fields, slot 8 is oil temperature) is incompatible with upstream NBG5
+(eleven fields). It remains isolated behind `evo_y_*` for legacy tests and tools;
+HUD and other existing consumers retain their current data formats.
 
-`plugin/BoostDeck-EvoY.xml` matches the candidate renderer. The dashboard
-staging script selects it explicitly, then applies the stock background and
-removes manual unit actions. `plugin/BoostDeck.xml` belongs to the updated
-upstream renderer. LaunchDeck, RoadJet and BEAMer are also cross-built against the local Evo Y
-frameworks and staged with their matching upstream image archives. Select them
-using `Install-Evo.cmd -AppSet Activities` or individual `-Apps` names. Their
-upstream diagnostic paths remain unchanged; they do not use the CDS gauge feed.
+BoostDeck stages `plugin/BoostDeck.xml` with a caption-free card background.
+The renderer supplies the selected caption and value per tile. Layouts are
+saved outside Plugins in `BoostDeck.signals`, with separate gasoline/diesel
+choices; colors use `BoostDeck.prefs`. The legacy `BoostDeck-EvoY.xml` is no
+longer selected by the current staging script.
+
+LaunchDeck, RoadJet and BEAMer are also cross-built and staged with their
+matching image archives. Select them using `Install-Evo.cmd -AppSet Activities`
+or individual `-Apps` names. Their upstream diagnostic paths remain unchanged.

@@ -1,5 +1,5 @@
 /* Evo Y uses its validated nine-channel protocol and CDS layout. */
-#if defined(PERF_LAB) && defined(BD_STOCK_DME)
+#if defined(PERF_LAB) && defined(BD_STOCK_DME) && !defined(BD_CONFIGURABLE)
 #include "evo_y_gauge_core.inc"
 #else
 #define _POSIX_C_SOURCE 200809L

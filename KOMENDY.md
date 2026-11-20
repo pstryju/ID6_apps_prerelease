@@ -201,3 +201,16 @@ sprawdzone na tym aucie.
 Po instalacji zestawu `Activities`, `.\Uninstall-Evo.cmd` przywraca stan
 sprzed tej instalacji wszystkich trzech aplikacji. Wyniki LaunchDeck i jego
 preferencje są przechowywane poza folderem Plugins i pozostają po deinstalacji.
+## Konfigurowanie kafelków BoostDeck
+
+Po przebudowaniu pakietu zainstaluj BoostDeck razem z nowym workerem:
+
+```powershell
+.\Install-Evo.cmd -Apps BoostDeck
+```
+
+W aplikacji wybierz **OPTIONS -> Configure gauges -> Gauge 1..9** i przypisz
+odczyt do każdej pozycji. Układy benzyny i Diesla oraz kolor są zapisywane poza
+folderem aplikacji. Domyślnie pozostają nasze odczyty, z RPM i temperaturą oleju.
+Jednostki temperatury i prędkości są pobierane z Evo; ręcznych opcji jednostek
+nie ma. Wybranie pozycji w menu nie gwarantuje, że DME udostępnia ten odczyt.

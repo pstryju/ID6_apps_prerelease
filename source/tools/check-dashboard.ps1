@@ -66,6 +66,15 @@ $resources = foreach ($folder in Get-ChildItem -LiteralPath $stage -Directory) {
     @{ app=$folder.Name; initial_image_models=$models.Count }
 }
 [xml]$codes = [IO.File]::ReadAllText((Join-Path $stage 'EngineCodes/EngineCodes.xml'))
+[xml]$boostLayout=[IO.File]::ReadAllText((Join-Path $stage 'BoostDeck/BoostDeck.xml'))
+if(-not $boostLayout.SelectSingleNode('//hmiState[@id="500"]')){$failures.Add('BoostDeck: gauge configuration menu missing')}
+for($i=0;$i -lt 9;$i++){
+    foreach($model in @((300+$i),(320+$i),(340+$i),(370+$i))){
+        if(-not $boostLayout.SelectSingleNode("//models/*[@id='$model']")){$failures.Add("BoostDeck: missing configurable model $model")}
+    }
+    $page=510+$i
+    if(-not $boostLayout.SelectSingleNode("//hmiState[@id='$page']")){$failures.Add("BoostDeck: missing gauge editor $page")}
+}
 foreach($app in @('BoostDeck','ShiftDeck')) {
     [xml]$description=[IO.File]::ReadAllText((Join-Path $stage "$app/$app.xml"))
     if($description.SelectNodes('//button[@id="410" or @id="411"]').Count){$failures.Add("${app}: manual unit options remain")}

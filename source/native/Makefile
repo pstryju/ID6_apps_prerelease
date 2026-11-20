@@ -90,7 +90,18 @@ build/test-launch-records: tests/test_launch_records.cpp build/launch_timer.o sr
 launch-assets:
 	$(PYTHON) tools/launch_art.py
 
-test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/diagnostic-probe build/test-core build/stock-collector build/test-stock-core build/test-cds build/test-most build/test-boost-most build/xdrive-control build/test-hud-core build/test-hud-boost build/test-diag-link build/test-engine-profiles build/test-hud-trace build/bootmod3 build/exhaust-flap build/test-launch-timer build/test-launch-records
+build/configurable-core.o: $(CORE) $(HEADERS) | build
+	$(CC) $(CFLAGS) -DPERF_LAB -DBD_CONFIGURABLE -Isrc -c $(CORE) -o $@
+
+build/test-boost-config: tests/test_boost_config.cpp src/boost_cds.h build/configurable-core.o $(HEADERS) | build
+	$(CXX) -O2 -std=c++98 -Wall -Wextra -Werror -DPERF_LAB -DBD_STOCK_DME -DBD_CONFIGURABLE -Isrc $(filter %.cpp %.o,$^) -lm -o $@
+
+build/test-boost-configurable: src/boost_most.c src/boost_obd.h src/engine_profiles.h $(HEADERS) $(CORE) tests/boost_most_env.c $(MOST_FAKE) $(MOST) $(MOST_HEADERS) | build
+	$(CC) $(CFLAGS) -DMOST_HOST -DPERF_LAB -DBD_STOCK_DME -DBD_CONFIGURABLE -Isrc -Itests $(filter %.c,$^) -pthread -lm -o $@
+
+test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/diagnostic-probe build/test-core build/stock-collector build/test-stock-core build/test-cds build/test-most build/test-boost-most build/xdrive-control build/test-hud-core build/test-hud-boost build/test-diag-link build/test-engine-profiles build/test-hud-trace build/bootmod3 build/exhaust-flap build/test-launch-timer build/test-launch-records build/test-boost-config build/test-boost-configurable
+	./build/test-boost-config
+	$(PYTHON) -B tests/test_boost_configurable.py
 	./build/test-launch-timer
 	./build/test-launch-records
 	./build/test-hud-trace

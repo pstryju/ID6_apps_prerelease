@@ -18,9 +18,14 @@ cxx() { qcc -V4.4.2,gcc_ntoarmv7le_gpp -lang-c++ -Wc,-std=gnu++98 -Wall -Wextra 
 c -DPERF_LAB -DBD_STOCK_DME -Isrc -O2 -fPIC -c src/gauge_core.c -o "$out/core.o"
 for item in BoostDeck:plugin ShiftDeck:shift_deck EngineCodes:engine_codes; do
     app=${item%:*}; src=${item#*:}
-    extra=""; if [ "$app" = BoostDeck ]; then extra="-DBD_BOOST_MOST"; fi
+    extra=""; if [ "$app" = BoostDeck ]; then extra="-DBD_BOOST_MOST -DBD_CONFIGURABLE"; fi
+    core="$out/core.o"
+    if [ "$app" = BoostDeck ]; then
+        c -DPERF_LAB -DBD_CONFIGURABLE -Isrc -O2 -fPIC -c src/gauge_core.c -o "$out/configurable-core.o"
+        core="$out/configurable-core.o"
+    fi
     cxx -DPERF_LAB -DBD_STOCK_DME -DNATIVE_SHIFT_SMOOTH -DBD_NATIVE_CDS $extra -Isrc -Isdk -O2 \
-        -fno-strict-aliasing -fno-exceptions -fPIC -shared "src/$src.cpp" "$out/core.o" \
+        -fno-strict-aliasing -fno-exceptions -fPIC -shared "src/$src.cpp" "$core" \
         "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -lm -lsocket \
         -Wl,--allow-shlib-undefined "-Wl,-soname,lib$app.so" -o "$out/lib$app.so"
 done
@@ -42,7 +47,7 @@ c -DNATIVE_FAST -DPERF_LAB -DSHIFT_DECK_ONLY -Isrc -O2 src/collector.c src/diag_
 c -DENGINE_CODES_ONLY -DPERF_LAB -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/engine-codes-qnx"
 c -O2 -static fileops.c -o "$out/gaugedeck-fileops"
 c -DDIAGNOSTIC_PROBE_ONLY -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/diagnostic-probe-qnx"
-c -DPERF_LAB -DBD_STOCK_DME -Isrc -O2 src/boost_most.c $most "$out/core.o" -lm -lsocket -o "$out/boostdeck-most-qnx"
+c -DPERF_LAB -DBD_STOCK_DME -DBD_CONFIGURABLE -Isrc -O2 src/boost_most.c $most "$out/configurable-core.o" -lm -lsocket -o "$out/boostdeck-most-qnx"
 c -DPERF_LAB -DBD_STOCK_DME -DBD_HUD_SOURCE -Isrc -O2 src/boost_most.c $most "$out/core.o" -lm -lsocket -o "$out/hud-boost-most-qnx"
 c -Isrc -O2 src/most_probe.c $most "$out/core.o" -lm -lsocket -o "$out/most-probe-qnx"
 c -DXDRIVE_ONLY -Isrc -O2 src/collector.c src/diag_link.c $most "$out/core.o" -lm -lsocket -o "$out/xdrive-control-qnx"
