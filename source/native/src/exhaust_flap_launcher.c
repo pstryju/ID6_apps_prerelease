@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
-#include <arpa/inet.h>
+#include "diagnostic_gateway.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -35,17 +35,10 @@ int main(int argc, char *argv[])
                  (int)length, directory) >= (int)sizeof(settings))
         return 2;
 
-    char gateway[16] = "169.254.21.3";
+    char gateway[16] = "auto";
     if (host_arg) {
-        FILE *input = fopen(settings, "r");
-        if (input) {
-            char candidate[16];
-            struct in_addr address;
-            if (fscanf(input, "%15s", candidate) == 1 &&
-                inet_pton(AF_INET, candidate, &address) == 1)
-                strcpy(gateway, candidate);
-            fclose(input);
-        }
+        if (!readDiagnosticGateway(ID6_GATEWAY_SETTINGS, gateway))
+            readDiagnosticGateway(settings, gateway);
         argv[host_arg] = gateway;
     }
     argv[0] = worker;

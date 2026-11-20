@@ -42,7 +42,8 @@ try {
         $folder = Join-Path $stage $app
         New-Item -ItemType Directory -Force $folder | Out-Null
         foreach ($extension in @('manifest', 'xml')) {
-            Copy-Item -LiteralPath (Join-Path $native "plugin/$app.$extension") -Destination $folder
+            $resource=if($app -eq 'BoostDeck' -and $extension -eq 'xml'){'plugin/BoostDeck-EvoY.xml'}else{"plugin/$app.$extension"}
+            Copy-Item -LiteralPath (Join-Path $native $resource) -Destination (Join-Path $folder "$app.$extension")
         }
         $library = Join-Path $output "lib$app.so"
         $bytes = [IO.File]::ReadAllBytes($library)

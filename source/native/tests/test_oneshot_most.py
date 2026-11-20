@@ -58,10 +58,52 @@ def hold_lease(seconds):
     return thread
 
 
+class ControlsMostTest(unittest.TestCase):
+    def disconnected(self, worker, args, fake="up"):
+        # Reserve a local TCP port without listening so connect fails predictably.
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = str(sock.getsockname()[1])
+            return run(worker, ["--host", "127.0.0.1", *args, "--port", port], fake)
+
+    def test_bootmod3_fallback_short_commands(self):
+        for args, message in [
+            (["--map", "2"], "Map 2 verified by DME readback."),
+            (["--sound", "1"], "Active Sound request accepted by DME."),
+            (["--flap", "1"], "Exhaust flap request accepted by DME."),
+        ]:
+            with self.subTest(args=args):
+                r = self.disconnected("bootmod3", args)
+                self.assertEqual(r.returncode, 0)
+                self.assertIn("transport: MOST", r.stderr)
+                self.assertEqual(r.stdout.strip(), message)
+
+    def test_bootmod3_blocks_unknown_rom(self):
+        r = self.disconnected("bootmod3", ["--map", "2"], "bm3-unknown")
+        self.assertEqual(r.stdout.strip(), "This Bootmod3 CustomROM is outside the supported profile list.")
+
+    def test_bootmod3_burbles_requires_hsfz(self):
+        r = self.disconnected("bootmod3", ["--burbles", "2"])
+        self.assertEqual(r.stdout.strip(), "Burble presets require the HSFZ gateway.")
+        self.assertNotIn("FAKE-MOST bind", r.stderr)
+
+    def test_integrated_exhaust_fallback(self):
+        for mode, label in enumerate(("auto", "open", "closed")):
+            with self.subTest(mode=mode):
+                r = self.disconnected("exhaust-flap", ["--flap", str(mode)])
+                self.assertEqual(r.returncode, 0)
+                self.assertIn("transport: MOST", r.stderr)
+                self.assertEqual(r.stdout.strip(), f"Confirmed: Exhaust {label}")
+
+    def test_integrated_exhaust_reports_refusal(self):
+        r = self.disconnected("exhaust-flap", ["--flap", "1"], "mhd-refuse")
+        self.assertEqual(r.stdout.strip(), "Exhaust open refused by DME (NRC 31)")
+
+
 class MhdMostTest(unittest.TestCase):
     def test_mhd_most_confirmed(self):
         r = run("mhd-maps", ["--transport", "most", "--map", "2"], "up")
-        self.assertEqual(r.stdout, "Confirmed: Map 2\n")
+        self.assertEqual(r.stdout, "Accepted by DME: Map 2\n")
         self.assertEqual(r.returncode, 0)
         self.assertIn("transport: MOST", r.stderr)
 
@@ -75,18 +117,18 @@ class MhdMostTest(unittest.TestCase):
 
     def test_mhd_without_host_uses_most(self):
         r = run("mhd-maps", ["--map", "3"], "up")
-        self.assertEqual(r.stdout, "Confirmed: Map 3\n")
+        self.assertEqual(r.stdout, "Accepted by DME: Map 3\n")
 
     def test_mhd_waits_for_busy_lease(self):
-        thread = hold_lease(0.8)
+        thread = hold_lease(2.4)
         try:
             r = run("mhd-maps", ["--transport", "most", "--map", "2"], "up")
         finally:
             thread.join()
-        self.assertEqual(r.stdout, "Confirmed: Map 2\n")
+        self.assertEqual(r.stdout, "Accepted by DME: Map 2\n")
 
     def test_mhd_result_before_close(self):
-        result_before_close(self, "mhd-maps", ["--transport", "most", "--map", "2"], "Confirmed: Map 2\n")
+        result_before_close(self, "mhd-maps", ["--transport", "most", "--map", "2"], "Accepted by DME: Map 2\n")
 
     def test_mhd_presses_while_boostdeck_reads_most(self):
         """A slow tunnel: the gauge worker steps aside, so every map press gets its turn."""
@@ -111,11 +153,11 @@ class MhdMostTest(unittest.TestCase):
                     boost.send_signal(signal.SIGTERM)
                 code = boost.wait(10)
                 err = boost.communicate()[1]
-        self.assertEqual(results, [f"Confirmed: Map {p % 4 + 1}\n" for p in range(8)])
+        self.assertEqual(results, [f"Accepted by DME: Map {p % 4 + 1}\n" for p in range(8)])
         self.assertEqual(code, 0, err)
 
-    def test_mhd_busy_after_2s(self):
-        thread = hold_lease(3)
+    def test_mhd_busy_after_3s(self):
+        thread = hold_lease(4.5)
         try:
             start = time.monotonic()
             r = run("mhd-maps", ["--transport", "most", "--map", "2"], "up")
@@ -123,8 +165,8 @@ class MhdMostTest(unittest.TestCase):
         finally:
             thread.join()
         self.assertEqual(r.stdout, BUSY)
-        self.assertGreaterEqual(waited, 1.8)
-        self.assertLess(waited, 3)
+        self.assertGreaterEqual(waited, 2.8)
+        self.assertLess(waited, 4.5)
 
 
 class EngineCodesTest(unittest.TestCase):
@@ -152,8 +194,16 @@ class EngineCodesTest(unittest.TestCase):
         result_before_close(self, "engine-codes", ["--transport", "most", "--codes"],
                             "Engine: 2 codes\n123456  status 2F\n0ABCDE  status 08\n")
 
+    def test_engine_codes_waits_for_busy_lease(self):
+        thread = hold_lease(2.4)
+        try:
+            r = run("engine-codes", ["--transport", "most", "--codes"], "up")
+        finally:
+            thread.join()
+        self.assertEqual(r.stdout, "Engine: 2 codes\n123456  status 2F\n0ABCDE  status 08\n")
+
     def test_engine_codes_busy(self):
-        thread = hold_lease(3)
+        thread = hold_lease(4.5)
         try:
             r = run("engine-codes", ["--transport", "most", "--codes"], "up")
         finally:

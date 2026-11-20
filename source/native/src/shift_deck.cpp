@@ -3,6 +3,7 @@
 #include "gateway_config.h"
 #include "drive_frame.h"
 #include "gauge_core.h"
+#include "gauge_preferences.h"
 #include "shift_assets.h"
 #ifdef BD_NATIVE_CDS
 #include "cds_telemetry.h"
@@ -15,6 +16,7 @@
 namespace {
 const unsigned kShiftPoll=0x53484654u;
 const char kShiftWorker[]="/var/opt/hmi/data/ID5/Plugins/ShiftDeck/shift-deck-qnx";
+const char kPreferences[]="/var/opt/hmi/data/ID5/ShiftDeck.prefs";
 #ifdef NATIVE_SHIFT_SMOOTH
 const unsigned kSweepSteps=128, kSweepBase=56400, kSweepAlert=56529;
 const unsigned kEaseMs=50;
@@ -35,8 +37,8 @@ class ShiftDeck : public bmw::PluginApp {
     unsigned bar_, lights_;
     int rpm_,kph_;
     bool shift_;
-#ifdef NATIVE_SHIFT_SMOOTH
     bool metric_;
+#ifdef NATIVE_SHIFT_SMOOTH
     double rpm_from_;
     uint64_t rpm_started_;
     double animatedRpm(uint64_t now) const {
@@ -154,6 +156,7 @@ class ShiftDeck : public bmw::PluginApp {
     }
     template <unsigned Index> bool setTarget(const bmw::Parcel&) {
         target_=Index;
+        saveGaugePreferences(kPreferences, target_, metric_);
         showTarget();
         draw(bd_mono_ms());
         return true;
@@ -161,6 +164,7 @@ class ShiftDeck : public bmw::PluginApp {
 #ifdef NATIVE_SHIFT_SMOOTH
     template <bool Metric> bool setUnits(const bmw::Parcel&) {
         metric_=Metric;
+        saveGaugePreferences(kPreferences, target_, metric_);
         kph_=-2;
         updateModel(64u,bmw::ImageID(metric_ ? 56660u : 55916u));
         draw(bd_mono_ms());
@@ -184,10 +188,9 @@ public:
 #endif
           socket_(-1),child_(-1),generation_(0),
           visible_(false),target_(kDefaultTarget),retry_at_(0),bar_(0),lights_(0),
-          rpm_(-2),kph_(-2),shift_(false) {
+          rpm_(-2),kph_(-2),shift_(false),metric_(false) {
         memset(&frame_,0,sizeof frame_);
 #ifdef NATIVE_SHIFT_SMOOTH
-        metric_=false;
         rpm_from_=0;
         rpm_started_=0;
 #endif
@@ -231,6 +234,7 @@ public:
         addHandler(44u,action);
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setTarget<4> >;
         addHandler(45u,action);
+        loadGaugePreferences(kPreferences, sizeof kShiftTargets / sizeof kShiftTargets[0], target_, metric_);
 #if defined(NATIVE_SHIFT_SMOOTH) && !defined(BD_NATIVE_CDS)
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setUnits<false> >;
         addHandler(46u,action);

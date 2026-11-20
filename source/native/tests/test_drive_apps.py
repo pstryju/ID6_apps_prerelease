@@ -72,7 +72,7 @@ class DriveAppsTest(unittest.TestCase):
             ("14ffffff", ["7f1422"]), ("1003", ["7f1033"])])
         self.assertIn("Clear refused (NRC 22)", result)
 
-    def run_worker(self, worker, args, transactions, env=None, stream="stdout"):
+    def run_worker(self, worker, args, transactions, env=None, stream="stdout", targets=None):
         errors = []
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
@@ -84,12 +84,13 @@ class DriveAppsTest(unittest.TestCase):
                     conn, _ = listener.accept()
                     with conn:
                         conn.settimeout(3)
-                        for request, responses in transactions:
+                        for index, (request, responses) in enumerate(transactions):
+                            ecu = targets[index] if targets else "12"
                             size, control = struct.unpack(">IH", exact(conn, 6))
                             self.assertEqual(control, 1)
-                            self.assertEqual(exact(conn, size), bytes.fromhex("f412"+request))
+                            self.assertEqual(exact(conn, size), bytes.fromhex("f4"+ecu+request))
                             for response in responses:
-                                conn.sendall(frame(1, bytes.fromhex("12f4"+response)))
+                                conn.sendall(frame(1, bytes.fromhex(ecu+"f4"+response)))
                         self.assertEqual(conn.recv(1), b"", "Unexpected repeat or extra command")
                 except Exception as error:
                     errors.append(error)
@@ -97,7 +98,7 @@ class DriveAppsTest(unittest.TestCase):
             thread = threading.Thread(target=gateway)
             thread.start()
             result = subprocess.run(
-                [BUILD/worker, "--host", "127.0.0.1", "--port", str(listener.getsockname()[1]), *args],
+                [BUILD/worker, "--host", "127.0.0.1", *args, "--port", str(listener.getsockname()[1])],
                 capture_output=True, text=True, check=True, timeout=6, env=env)
             thread.join(4)
             self.assertFalse(thread.is_alive())
@@ -108,7 +109,7 @@ class DriveAppsTest(unittest.TestCase):
     def test_map_two_has_only_one_request_and_requires_matching_echo(self):
         result = self.run_worker("mhd-maps", ["--map", "2"],
                                  [("2f0101", ["7f2f78", "6f0100", "6f0101"])])
-        self.assertEqual(result, "Confirmed: Map 2\n")
+        self.assertEqual(result, "Accepted by DME: Map 2\n")
 
     def test_wrong_echo_does_not_confirm_and_refusal_is_reported(self):
         result = self.run_worker("mhd-maps", ["--map", "1"], [("2f0100", ["6f0101"])])
@@ -121,7 +122,7 @@ class DriveAppsTest(unittest.TestCase):
             with self.subTest(slot=slot):
                 result = self.run_worker("mhd-maps", ["--map", str(slot)],
                                          [("2f01"+index, ["6f01"+index])])
-                self.assertEqual(result, f"Confirmed: Map {slot}\n")
+                self.assertEqual(result, f"Accepted by DME: Map {slot}\n")
 
     def test_shift_worker_decodes_live_rpm_and_speed(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
@@ -133,6 +134,85 @@ class DriveAppsTest(unittest.TestCase):
             self.assertGreater(sampled_ms, 0)
             self.assertEqual((rpm,kph), (6250,100))
 
+
+    def test_launch_worker_samples_speed_without_an_rpm_query(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.settimeout(2)
+            self.run_worker("shift-deck",
+                ["--speed-only", "--cycles", "1", "--udp-port", str(listener.getsockname()[1])],
+                [("010d", ["410d61"])])
+            sampled_ms, rpm, speed = struct.unpack("=Qii", listener.recv(64))
+            self.assertGreater(sampled_ms, 0)
+            self.assertEqual((rpm, speed), (-1, 97))
+
+    def test_bm3_current_map_uses_fixed_identification_fallback(self):
+        marker=bytearray(255)
+        marker[:4]=b"BM3_"
+        tag=b"~|~___#F4C9L8G05ABCDE\x00"
+        marker[84:84+len(tag)]=tag
+        result=self.run_worker("bootmod3",["--current-map","0"],[
+            ("2c02f30124807ffe5000ff",["7f2c31"]),
+            ("2314807ffe50ff",["63"+marker.hex()]),
+            ("23145003800601",["6302"]),
+        ])
+        self.assertEqual(result,"Current map: 3\n")
+
+    def test_bm3_reads_actual_map_after_write_acceptance_or_refusal(self):
+        marker=b"BM3_R #011000".ljust(255,b"\x00")
+        identify=[("2c02f30124807ffe5000ff",["6c02f301"]),("22f301",["62f301"+marker.hex()])]
+        for write_reply, map_byte, expected in (
+            ("7d", "01", "Map 2 verified by DME readback.\n"),
+            ("7d", "00", "Map 2 change unconfirmed. Current map: 1.\n"),
+            ("7f3d31", "00", "Map 2 change unconfirmed. Current map: 1.\n"),
+        ):
+            with self.subTest(write_reply=write_reply,map_byte=map_byte):
+                result=self.run_worker("bootmod3",["--map","2"],identify+[
+                    ("3d14d001d006020101",[write_reply]),("2314d001d00601",["63"+map_byte])
+                ])
+                self.assertEqual(result,expected)
+
+    def test_bm3_security_refusal_stops_identification(self):
+        result=self.run_worker("bootmod3",["--current-map","0"],[
+            ("2c02f30124807ffe5000ff",["7f2c33"]),
+        ])
+        self.assertIn("identification refused (NRC 33)",result)
+
+    def test_bm3_s58_binary_marker_and_invalid_slot(self):
+        marker=bytearray(255)
+        marker[:4]=b"BM3_"
+        tag=b"#R4C9F4P03ABCDE_G87\x00"
+        marker[101:101+len(tag)]=tag
+        result=self.run_worker("bootmod3",["--current-map","0"],[
+            ("2c02f30124807ffe5000ff",["6c02f301"]),
+            ("22f301",["62f301"+marker.hex()]),
+            ("23146003800601",["6304"]),
+        ])
+        self.assertEqual(result,"Current map unavailable.\n")
+
+    def test_xdrive_status_identifies_unknown_modules_read_only(self):
+        result=self.run_worker("xdrive-control",["--status","0"],[
+            ("22f150",["62f1500f2500"]), ("22f150",["62f1500f2180"]),
+            ("22f150",["62f1500f2520"])],targets=["29","19","39"])
+        self.assertEqual(result,"Unsupported DSC 0F2500. Transfer case 0F2180. VIP 0F2520.\n")
+
+    def test_dsc25_switch_requires_park_and_verified_lmv(self):
+        ident = [("22f150", ["62f1500f1860"]), ("22dbe1", ["62dbe101"])]
+        result = self.run_worker("xdrive-control", ["--drive-mode", "0"],
+            ident + [("22f150", ["62f1500f1400"])], targets=["29", "29", "19"])
+        self.assertIn("requires a verified LMV", result)
+
+        current = ident + [("22f150", ["62f1500f1480"]), ("224002", ["62400209c4200f"])]
+        targets = ["29", "29", "19", "19", "18"]
+        result = self.run_worker("xdrive-control", ["--drive-mode", "0"],
+            current + [("22da2e", ["62da2e0005"])], targets=targets)
+        self.assertIn("confirmed Park", result)
+
+        result = self.run_worker("xdrive-control", ["--drive-mode", "0"],
+            current + [("22da2e", ["62da2e0006"]), ("010c", ["410c0c80"]), ("010d", ["410d00"]),
+                       ("2edbe100", ["6edbe1"]), ("224002", ["62400209c4280f"])],
+            targets=targets + ["12", "12", "29", "19"])
+        self.assertEqual(result, "Transfer case confirms RWD.\n")
 
     def test_shift_worker_waits_for_a_busy_gateway(self):
         with socket.socket() as gateway, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as lock:

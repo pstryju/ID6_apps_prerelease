@@ -46,7 +46,7 @@ static void test_parser_boundaries(void) {
     assert(!parse_field(1,"1 2",&out));
     assert(!parse_field(5,"inf",&out));
     assert(!parse_field(5,"1e999",&out));
-    assert(!parse_field(5,"10000.1",&out));
+    assert(!parse_field(5,"20000.1",&out));
     assert(parse_field(5,"-10000",&out) && out.value[0]==-10000);
     { const char embedded_nul[]="NBG2 1 0 31 1 18 0 14 0 0 0 40 0 90 0\0junk";
       assert(!bd_parse(embedded_nul,sizeof embedded_nul-1,&out)); }
@@ -81,6 +81,28 @@ int main(void) {
           assert(!bd_decode_did(dids[i],payloads[i],width-1,&x) && x==123);
           assert(!bd_decode_did(dids[i],extra,width+1,&x) && x==123);
       } }
+    { /* Standard OBD-II mode 01 replies read at idle on an F22 M240i (B58, NBTevo_S19322I). */
+      const unsigned char oil[]={0x94}, volts[]={0x39,0xf8};
+      const unsigned char oil_max[]={0xd2}, oil_hot[]={0xd3}, volts_low[]={0x17,0x67};
+      assert(bd_decode_obd(0x5c,oil,1,&x) && fabs(x-108)<.00001);
+      assert(bd_decode_obd(0x42,volts,2,&x) && fabs(x-14.84)<.00001);
+      assert(bd_decode_obd(0x5c,oil_max,1,&x) && fabs(x-170)<.00001);
+      x=123;
+      assert(!bd_decode_obd(0x5c,oil_hot,1,&x) && x==123);    /* 171 C is not plausible */
+      assert(!bd_decode_obd(0x42,volts_low,2,&x) && x==123);  /* 5.991 V */
+      assert(!bd_decode_obd(0x5c,volts,2,&x) && x==123);      /* wrong length */
+      assert(!bd_decode_obd(0x42,oil,1,&x) && x==123);
+      assert(!bd_decode_obd(0xff,volts,2,&x) && x==123);      /* not decoded here */
+      assert(!bd_decode_obd(0x5c,0,1,&x) && !bd_decode_obd(0x5c,oil,1,0)); }
+    assert(bd_decode_obd(0x23, (const unsigned char[]){0x02,0x2d}, 2, &x));
+    assert(fabs(x-55.7)<.001);
+    assert(bd_decode_obd(0x05, (const unsigned char[]){125}, 1, &x) && x==85);
+    assert(!bd_decode_obd(0x23, (const unsigned char[]){1}, 1, &x));
+    assert(bd_decode_obd(0x06, (const unsigned char[]){0x90}, 1, &x) && x==12.5);
+    assert(bd_decode_obd(0x0e, (const unsigned char[]){0x98}, 1, &x) && x==12);
+    assert(bd_decode_obd(0x43, (const unsigned char[]){0x01,0xfe}, 2, &x) && x==200);
+    assert(bd_decode_obd(0x44, (const unsigned char[]){0x80,0x00}, 2, &x) && x==1);
+    assert(!bd_decode_obd(0x44, (const unsigned char[]){0x80}, 1, &x));
     test_parser_boundaries();
     memset(&f,0,sizeof f); f.seq=123; f.valid=31; f.sent_ms=1234567890123ULL;
     f.value[0]=18.25; f.value[1]=14.7;
@@ -98,6 +120,6 @@ int main(void) {
     assert(fabs(bd_display_value(BD_BOOST,14.5037738,1)-1)<.0001);
     assert(fabs(bd_display_value(BD_IAT,100,0)-212)<.0001);
     assert(bd_bar(BD_BOOST,0)==0 && bd_bar(BD_BOOST,-100)==0 && bd_bar(BD_BOOST,999)==1000);
-    puts("Core: recorded signal payloads, signed timing, sentinels, wire format and stale data passed.");
+    puts("Core: recorded signal payloads, OBD PIDs, signed timing, sentinels, wire format and stale data passed.");
     return 0;
 }

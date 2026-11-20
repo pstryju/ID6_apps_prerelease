@@ -98,6 +98,7 @@ def map_app():
     name="MhdMaps"
     doc, actions, models, _, page = entry(name,"MHD Maps",208,103,100,images=True)
     ET.SubElement(models,"raDataModel",id="50",modelType="Richtext")
+    ET.SubElement(models,"raDataModel",id="53",modelType="Richtext")
     content=ET.SubElement(page,"components")
     def graphic(component, model, asset, x, y, w, h):
         ET.SubElement(models,"imageIdModel",id=str(model),imageId=str(asset))
@@ -115,7 +116,8 @@ def map_app():
         # outline and action, and draw the centered labels on the tile art.
         tile=ET.SubElement(content,"button",id=str(150+slot),action=str(20+slot),imageModel="62")
         position(tile,174+(slot-1)*220,118,192,192)
-    position(ET.SubElement(content,"label",id="150",model="50"),174,337,850,53)
+    position(ET.SubElement(content,"label",id="155",model="53"),174,321,850,44)
+    position(ET.SubElement(content,"label",id="150",model="50"),174,367,850,44)
     save(doc,f"{name}.xml")
 
     arial=Path("/System/Library/Fonts/Supplemental/Arial.ttf")

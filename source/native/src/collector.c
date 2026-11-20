@@ -1,3 +1,7 @@
+/* Evo Y uses its validated nine-channel protocol and CDS layout. */
+#if defined(BD_STOCK_DME) || defined(DIAGNOSTIC_PROBE_ONLY)
+#include "evo_y_collector.inc"
+#else
 #define _POSIX_C_SOURCE 200809L
 #include "gauge_core.h"
 #include "diagnostic_lease.h"
@@ -9,6 +13,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -20,7 +25,7 @@ static unsigned number(const char *s, unsigned lo, unsigned hi) {
     return (unsigned)n;
 }
 
-#if defined(ENGINE_CODES_ONLY) || defined(MHD_MAPS_ONLY)
+#if defined(ENGINE_CODES_ONLY) || defined(MHD_MAPS_ONLY) || defined(EXHAUST_FLAP_ONLY)
 #include <fcntl.h>
 
 /* The result is out: end the plugin's pipe now, before the link's bounded close. */
@@ -32,9 +37,18 @@ static void result_done(void) {
 }
 #endif
 
-#if defined(BM3_ONLY) || defined(XDRIVE_ONLY) || defined(DIAGNOSTIC_PROBE_ONLY)
-/* These controls write to the DME and DSC and read ECUs never seen through the MOST tunnel, so they stay
- * on HSFZ. */
+#if defined(BM3_ONLY) || defined(XDRIVE_ONLY)
+#ifdef BM3_ONLY
+typedef struct diag_link *control_link;
+static int exchange(control_link link, unsigned ecu, const unsigned char *uds, unsigned uds_size,
+                    const unsigned char *prefix, unsigned prefix_size,
+                    unsigned char *reply, unsigned reply_size, unsigned timeout_ms,
+                    unsigned *negative) {
+    return diag_link_request(link, ecu, uds, uds_size, prefix, prefix_size, reply, reply_size,
+                             timeout_ms, negative);
+}
+#else
+/* The shared MOST tunnel cannot address DSC, EGS or the transfer case. */
 static void stop(int sig) { (void)sig; diag_running = 0; }
 static int connect_gw(const char *host, unsigned port) { return diag_hsfz_connect(host, port); }
 static int exchange(int fd, unsigned ecu, const unsigned char *uds, unsigned uds_size,
@@ -45,51 +59,8 @@ static int exchange(int fd, unsigned ecu, const unsigned char *uds, unsigned uds
                               timeout_ms, negative);
 }
 #endif
-
-#if defined(BM3_ONLY) || defined(XDRIVE_ONLY)
 #include <ctype.h>
 #include "controls.c"
-#elif defined(DIAGNOSTIC_PROBE_ONLY)
-int main(int argc,char **argv) {
-    unsigned port=6801,negative,i,j,count;int lock,fd=-1,n,signals=0,arg;
-    const unsigned char requests[12][3]={{1,0x0c,0},{1,5,0},{0x22,0x43,0},{0x22,0x56,0xd7},
-        {1,0x23,0},{1,0x5c,0},{1,0x42,0},{1,4,0},{0x22,0x42,1},{0x22,0x42,5},{1,0x0b,0},{1,0x33,0}};
-    const char *labels[12]={"RPM","coolant","BMW-coolant","BMW-rail","OBD-rail","oil-temperature",
-        "DME-voltage","engine-load","BMW-ambient","BMW-charge","OBD-MAP","OBD-baro"};
-    const unsigned char basic[3][2]={{1,0x0c},{1,0x0d},{1,5}};
-    const char *basic_labels[3]={"RPM","speed","coolant"};
-    if(argc<3||strcmp(argv[1],"--host"))return 2;
-    for(arg=3;arg<argc;arg++) {
-        if(!strcmp(argv[arg],"--port")&&arg+1<argc)port=number(argv[++arg],1,65535);
-        else if(!strcmp(argv[arg],"--signals"))signals=1;
-        else return 2;
-    }
-    count=signals?12:3;
-    signal(SIGINT,stop);signal(SIGTERM,stop);signal(SIGPIPE,SIG_IGN);
-    lock=reserve_gateway();
-    if(lock<0){puts("Diagnostics busy: exit gauge apps and close other diagnostic clients.");return 1;}
-    for(i=0;i<count&&diag_running;i++) {
-        const unsigned char *request=signals?requests[i]:basic[i];
-        unsigned size=request[0]==0x22?3:2;
-        unsigned char prefix[3],reply[64];
-        if(fd<0)fd=connect_gw(argv[2],port);
-        if(fd<0){printf("CONNECT FAILED %s:%u: %s\n",argv[2],port,strerror(errno));close(lock);return 1;}
-        if(!i)printf("TCP CONNECTED %s:%u\n",argv[2],port);
-        memcpy(prefix,request,size);prefix[0]=(unsigned char)(request[0]+0x40);
-        n=exchange(fd,0x12,request,size,prefix,size,reply,sizeof reply,700,&negative);
-        printf("READ %s request=",signals?labels[i]:basic_labels[i]);
-        for(j=0;j<size;j++)printf("%02X",request[j]);
-        printf(" result=%d",n);
-        if(n>0){printf(" response=");for(j=0;j<(unsigned)n;j++)printf("%02X",reply[j]);}
-        else if(n==-2)printf(" NRC=%02X",negative);
-        puts("");fflush(stdout);
-        if(signals){close(fd);fd=-1;}
-        else if(n==-1)break;
-        poll(0,0,150);
-    }
-    if(fd>=0)close(fd);
-    close(lock);return 0;
-}
 #elif defined(ENGINE_CODES_ONLY)
 #include "most/most_link.h"
 
@@ -177,6 +148,56 @@ int main(int argc, char **argv) {
     diag_link_close(&link);
     return 0;
 }
+#elif defined(EXHAUST_FLAP_ONLY)
+int main(int argc, char **argv) {
+    const char *host = 0;
+    unsigned port = 6801, mode = 3, negative;
+    int i, n, transport = DIAG_AUTO;
+    struct diag_link link;
+    struct diag_link_cfg cfg;
+    static const unsigned char requests[][6] = {
+        {0x2f, 0x60, 0xfd, 0},
+        {0x2f, 0x60, 0xfd, 3, 0x14, 0xfe},
+        {0x2f, 0x60, 0xfd, 3, 0x23, 0x28}
+    };
+    static const char *labels[] = {"Exhaust auto", "Exhaust open", "Exhaust closed"};
+    const unsigned char prefix[] = {0x6f, 0x60, 0xfd};
+    unsigned char reply[64];
+
+    for (i = 1; i < argc; ++i) {
+        if (!strcmp(argv[i], "--host") && i+1 < argc && !host) host = argv[++i];
+        else if (!strcmp(argv[i], "--port") && i+1 < argc) port = number(argv[++i], 1, 65535);
+        else if (!strcmp(argv[i], "--flap") && i+1 < argc && mode == 3) mode = number(argv[++i], 0, 2);
+        else if (!strcmp(argv[i], "--transport") && i+1 < argc && !strcmp(argv[i+1], "hsfz")) {
+            transport = DIAG_HSFZ; ++i;
+        } else if (!strcmp(argv[i], "--transport") && i+1 < argc && !strcmp(argv[i+1], "most")) {
+            transport = DIAG_MOST; ++i;
+        } else return 2;
+    }
+    if (mode == 3 || (!host && transport == DIAG_HSFZ)) return 2;
+    diag_link_signals();
+    memset(&cfg, 0, sizeof cfg);
+    cfg.host = host;
+    cfg.port = port;
+    cfg.transport = transport;
+    cfg.kind = DIAG_ONESHOT;
+    cfg.dsi_name = "exhaustflap";
+    diag_link_init(&link, &cfg);
+    if (!diag_link_reserve_oneshot(&link)) {
+        puts("Diagnostics busy. Wait a moment and try again.");
+        return 0;
+    }
+    if (diag_link_up(&link)) {
+        n = diag_link_request(&link, 0x12, requests[mode], mode ? 6u : 4u,
+                              prefix, sizeof prefix, reply, sizeof reply, 1600, &negative);
+        if (n >= 3) printf("Confirmed: %s\n", labels[mode]);
+        else if (n == -2) printf("%s refused by DME (NRC %02X)\n", labels[mode], negative);
+        else printf("%s: no DME reply\n", labels[mode]);
+    } else puts("Diagnostic gateway unavailable");
+    result_done();
+    diag_link_close(&link);
+    return 0;
+}
 #elif defined(MHD_MAPS_ONLY)
 int main(int argc, char **argv) {
     const char *host=0;
@@ -241,7 +262,7 @@ int main(int argc, char **argv) {
         if (n>=3) printf("Accepted by DME: %s\n",label);
         else if (n==-2) printf("%s refused by DME (NRC %02X)\n",label,negative);
         else printf("%s: no matching DME reply\n",label);
-    } else if (n>=3) printf("Confirmed: Map %u\n",value+1);
+    } else if (n>=3) printf("Accepted by DME: Map %u\n",value+1);
     else if (n==-2) printf("Map %u refused by DME (NRC %02X)\n",value+1,negative);
     else puts("Map result unknown. Check Current Map in MHD.");
     result_done();
@@ -268,7 +289,7 @@ int main(int argc, char **argv) {
     unsigned udp_port=DRIVE_PORT, cycles=0, count=0;
     pid_t parent=getppid();
     struct sockaddr_in dest;
-    int sock, i, lost;
+    int sock, i, lost, speed_only=0;
 #ifdef NATIVE_FAST
     uint64_t speed_due=0;
     int last_speed=-1;
@@ -276,6 +297,7 @@ int main(int argc, char **argv) {
     for (i=1;i<argc;++i) {
         if (!strcmp(argv[i],"--host") && i+1<argc && !cfg.host) cfg.host=argv[++i];
         else if (!strcmp(argv[i],"--port") && i+1<argc) cfg.port=number(argv[++i],1,65535);
+        else if (!strcmp(argv[i],"--speed-only")) speed_only=1;
         else if (!strcmp(argv[i],"--udp-port") && i+1<argc) udp_port=number(argv[++i],1,65535);
         else if (!strcmp(argv[i],"--cycles") && i+1<argc) cycles=number(argv[++i],1,1000);
         else if (!strcmp(argv[i],"--transport") && i+1<argc && !strcmp(argv[i+1],"auto")) ++i;
@@ -298,16 +320,20 @@ int main(int argc, char **argv) {
         uint64_t start=bd_mono_ms(), elapsed;
         int up=diag_link_up(&link);
         if (up) {
-            rc=read_live_pid(&link,0x0c,2,&rpm);
+            if (speed_only) {
+                rc=read_live_pid(&link,0x0d,1,&kph);
+            } else {
+                rc=read_live_pid(&link,0x0c,2,&rpm);
 #ifdef NATIVE_FAST
-            if (!rc && start>=speed_due) {
-                rc=read_live_pid(&link,0x0d,1,&last_speed);
-                speed_due=start+65;
-            }
-            kph=last_speed;
+                if (!rc && start>=speed_due) {
+                    rc=read_live_pid(&link,0x0d,1,&last_speed);
+                    speed_due=start+65;
+                }
+                kph=last_speed;
 #else
-            if (!rc) rc=read_live_pid(&link,0x0d,1,&kph);
+                if (!rc) rc=read_live_pid(&link,0x0d,1,&kph);
 #endif
+            }
             if (rc==-1) diag_link_drop(&link);
             else if (!rc) {
                 f.sampled_ms=bd_mono_ms();
@@ -353,16 +379,6 @@ static int decode_reply(unsigned ecu, unsigned did, const unsigned char *reply, 
     return decoded;
 }
 
-#if defined(PERF_LAB) && defined(BD_STOCK_DME)
-static int read_obd(struct diag_link *link,unsigned pid,double *value) {
-    unsigned char request[]={1,(unsigned char)pid},prefix[]={0x41,(unsigned char)pid},reply[64];
-    unsigned negative;
-    int n=diag_link_request(link,0x12,request,2,prefix,2,reply,sizeof reply,500,&negative);
-    if(n==-2)return 0;
-    if(n<0)return -1;
-    return bd_decode_obd(pid,reply+2,(size_t)n-2,value);
-}
-#endif
 /* 1 decoded, 0 unavailable or refused, -1 link lost, -3 this read failed but the link is kept. */
 static int read_did(struct diag_link *link, unsigned ecu, unsigned did, double *value) {
     unsigned char request[]={0x22,(unsigned char)(did>>8),(unsigned char)did};
@@ -379,6 +395,50 @@ static int read_did(struct diag_link *link, unsigned ecu, unsigned did, double *
     if (n<0) return -1;
     return decode_reply(ecu,did,reply,n,value);
 }
+
+#ifdef PERF_LAB
+/* Query selected standardized channels only. Diesel substitutes Mode 01
+ * for unverified gasoline DIDs and reads the ambient reference before boost. */
+static const struct {
+    unsigned char pid;
+    unsigned slot, diesel_only;
+} obd_pids[] = {
+    {0x33, BD_BARO, 0}, {0x5c, BD_OIL_TEMP, 0}, {0x42, BD_BATTERY, 0},
+    {0x0c, BD_RPM, 0}, {0x0d, BD_SPEED, 0}, {0x04, BD_LOAD, 0},
+    {0x0b, BD_MAP, 0}, {0x10, BD_MAF, 0}, {0x11, BD_THROTTLE, 0},
+    {0x46, BD_AMBIENT, 0}, {0x5e, BD_FUEL_RATE, 0},
+    {0x2f, BD_FUEL_LEVEL, 0}, {0x49, BD_ACCELERATOR, 0},
+    {0x05, BD_COOLANT, 1}, {0x0f, BD_IAT, 1}, {0x23, BD_RAIL, 1},
+    {0x0b, BD_BOOST, 1},
+    {0x0e, BD_SPARK_ADVANCE, 0}, {0x43, BD_ABS_LOAD, 0},
+    {0x06, BD_STFT_B1, 0}, {0x07, BD_LTFT_B1, 0},
+    {0x08, BD_STFT_B2, 0}, {0x09, BD_LTFT_B2, 0},
+    {0x44, BD_LAMBDA_TARGET, 0}, {0x3c, BD_CAT_TEMP, 0},
+    {0x4c, BD_THROTTLE_TARGET, 0}
+};
+
+/* Same contract as read_did: 1 decoded, 0 unavailable or refused, -1 link lost, -3 kept. */
+static int read_pid(struct diag_link *link, unsigned char pid, double *value) {
+    unsigned char request[]={0x01,pid}, prefix[]={0x41,pid}, reply[16];
+    unsigned negative;
+    int decoded, j;
+    int n=diag_link_request(link,0x12,request,2,prefix,2,reply,sizeof reply,500,&negative);
+    if (n==-2) {
+        fprintf(stderr,"ECU 12 PID %02X NRC %02X\n",pid,negative);
+        return 0;
+    }
+    if (n==-3) return -3;
+    if (n<0) return -1;
+    decoded=n>=2 && bd_decode_obd(pid,reply+2,(size_t)n-2,value);
+    if (trace_reads) {
+        fprintf(stderr,"RAW mono_ms=%llu ecu=12 pid=%02X payload=",(unsigned long long)bd_mono_ms(),pid);
+        for (j=2;j<n;++j) fprintf(stderr,"%02X",reply[j]);
+        if (decoded) fprintf(stderr," decoded=%.6f\n",*value);
+        else fprintf(stderr," unavailable reason=invalid-or-out-of-range\n");
+    }
+    return decoded;
+}
+#endif
 
 static int send_frame(int sock, struct sockaddr_in *dest, bd_frame *f, uint64_t *observed) {
     char packet[BD_MAX_PACKET];
@@ -422,18 +482,20 @@ int main(int argc, char **argv) {
     uint64_t due[sizeof dids/sizeof dids[0]] = {0};
     uint64_t failed_until[sizeof dids/sizeof dids[0]] = {0};
 #ifdef PERF_LAB
-#ifdef BD_STOCK_DME
-    uint64_t next_oil_temperature=0;
-    int use_obd_rail=0;
-#else
-    int ethanol=0;
+    int ethanol=0, diesel=0;
+    unsigned selected=(1u << 8) - 1;
     uint64_t next_ethanol=0;
-#endif
+    uint64_t obd_due[sizeof obd_pids/sizeof obd_pids[0]] = {0};
+    uint64_t obd_failed_until[sizeof obd_pids/sizeof obd_pids[0]] = {0};
 #endif
     for (i = 1; i < (unsigned)argc; ++i) {
         if (!strcmp(argv[i], "--demo")) demo = 1;
-#if defined(PERF_LAB) && !defined(BD_STOCK_DME)
+#ifdef PERF_LAB
         else if (!strcmp(argv[i], "--ethanol")) ethanol = 1;
+        else if (!strcmp(argv[i], "--extended")) selected |= (1u << BD_OIL_TEMP) | (1u << BD_BATTERY);
+        else if (!strcmp(argv[i], "--diesel")) diesel=1;
+        else if (!strcmp(argv[i], "--signals") && i+1 < (unsigned)argc)
+            selected=number(argv[++i],1,(1u << BD_COUNT)-1);
 #endif
         else if (!strcmp(argv[i], "--session")) session = 1;
         else if (!strcmp(argv[i], "--trace")) trace_reads = 1;
@@ -474,17 +536,23 @@ int main(int argc, char **argv) {
             f.value[BD_RAIL]=95+22*sin(t); f.value[BD_OIL]=2.5+.5*sin(t);
             f.value[BD_COOLANT]=86+3*sin(t);
 #ifdef PERF_LAB
-#ifdef BD_STOCK_DME
-            f.value[BD_OIL_TEMP]=95;
-#else
             f.value[BD_ETHANOL]=38;
-#endif
+            f.value[BD_OIL_TEMP]=98+4*sin(t); f.value[BD_BATTERY]=14.2;
+            f.value[BD_RPM]=2800; f.value[BD_SPEED]=80; f.value[BD_LOAD]=53;
+            f.value[BD_MAP]=185; f.value[BD_MAF]=62; f.value[BD_THROTTLE]=45;
+            f.value[BD_BARO]=101; f.value[BD_AMBIENT]=23; f.value[BD_FUEL_RATE]=14;
+            f.value[BD_FUEL_LEVEL]=69; f.value[BD_ACCELERATOR]=48;
+            f.value[BD_SPARK_ADVANCE]=12; f.value[BD_ABS_LOAD]=94;
+            f.value[BD_STFT_B1]=2.3; f.value[BD_LTFT_B1]=-1.5;
+            f.value[BD_STFT_B2]=1.6; f.value[BD_LTFT_B2]=-0.8;
+            f.value[BD_LAMBDA_TARGET]=.95; f.value[BD_CAT_TEMP]=580;
+            f.value[BD_THROTTLE_TARGET]=46;
 #endif
             f.valid=(1u<<BD_COUNT)-1;
             for (i=0;i<BD_COUNT;++i) observed[i]=bd_mono_ms();
         } else {
             int full_scan = session ? !scanned : link.fd < 0 && !diag_link_on_most(&link);
-            int up;
+            int up, stopped = 0; /* the DID scan ended early on a failed read */
             diag_link_tick(&link);
             up = diag_link_up(&link);
             if (diag_link_on_most(&link)) f.valid &= ~(1u << BD_TRANS); /* no EGS reads on MOST */
@@ -493,6 +561,10 @@ int main(int argc, char **argv) {
                 int rc;
                 unsigned kept;
                 int on_most = diag_link_on_most(&link);
+#ifdef PERF_LAB
+                if (diesel && dids[i] != 0xda12) continue;
+                if (!(selected & (1u << (i ? i-1 : BD_BOOST)))) continue;
+#endif
                 if ((no_trans || on_most) && dids[i] == 0xda12) continue;
                 if ((session || on_most) && start < failed_until[i]) continue;
                 if (!full_scan && periods[i] && start < due[i]) continue;
@@ -503,16 +575,7 @@ int main(int argc, char **argv) {
                 }
                 kept = i != 0 ? f.valid & (1u << (i-1)) : 0;
                 f.valid &= ~kept;
-#if defined(PERF_LAB) && defined(BD_STOCK_DME)
-                if(dids[i]==0x4300)rc=read_obd(&link,5,&v);
-                else if(dids[i]==0x56d7&&use_obd_rail)rc=read_obd(&link,0x23,&v);
-                else {
-                    rc=read_did(&link,dids[i]==0xda12?0x18:0x12,dids[i],&v);
-                    if(dids[i]==0x56d7&&rc==0){rc=read_obd(&link,0x23,&v);if(rc>0)use_obd_rail=1;}
-                }
-#else
                 rc = read_did(&link, dids[i] == 0xda12 ? 0x18 : 0x12, dids[i], &v);
-#endif
                 if (rc == -3) { /* skip it for a while; a value still fresh stays shown */
                     failed_until[i] = bd_mono_ms()+2000;
                     if (kept) {
@@ -521,6 +584,7 @@ int main(int argc, char **argv) {
                         f.valid |= kept;
                         if (!bd_is_fresh(&f, i-1, 0)) f.valid &= ~kept;
                     }
+                    stopped = 1;
                     break;
                 }
                 if (rc < 0) {
@@ -531,6 +595,7 @@ int main(int argc, char **argv) {
                         f.valid=0;
                         have_ambient=0;
                     }
+                    stopped = 1;
                     break;
                 }
                 if (i == 0) {
@@ -548,19 +613,42 @@ int main(int argc, char **argv) {
                 /* A tunnel read is slow, so each new value goes out at once. */
                 if (diag_link_on_most(&link) && !send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }
             }
+            (void)stopped; /* only the PERF_LAB build reads after the DID scan */
 #ifdef PERF_LAB
-#ifdef BD_STOCK_DME
-            if(up&&start>=next_oil_temperature&&diag_running) {
-                double temperature=0;
-                int rc=read_obd(&link,0x5c,&temperature);
-                f.valid&=~(1u<<BD_OIL_TEMP);
-                if(rc>0){f.value[BD_OIL_TEMP]=temperature;observed[BD_OIL_TEMP]=bd_mono_ms();f.valid|=1u<<BD_OIL_TEMP;}
-                next_oil_temperature=bd_mono_ms()+2000;
-                if(rc<0){diag_link_drop(&link);}
+            for (i=0; up && !stopped && diag_running &&
+                      i < sizeof obd_pids / sizeof obd_pids[0]; ++i) {
+                const unsigned k = obd_pids[i].slot;
+                double v = 0;
+                int rc;
+                const unsigned wanted = selected | (diesel && (selected & (1u<<BD_BOOST)) ?
+                                                         (1u<<BD_BARO) : 0);
+                if (!(wanted & (1u<<k)) || (obd_pids[i].diesel_only && !diesel)) continue;
+                if (start < obd_due[i] || start < obd_failed_until[i]) continue;
+                if (full_scan && i && !obd_due[i]) { obd_due[i]=start+100+i*65; continue; }
+                obd_due[i]=start+2000;
+                rc = read_pid(&link, obd_pids[i].pid, &v);
+                if (rc == -3) { obd_failed_until[i]=bd_mono_ms()+2000; break; }
+                if (rc < 0) {
+                    diag_link_drop(&link);
+                    if (diag_link_lost(&link)) { most_lost = 1; diag_running = 0; }
+                    else if (session) obd_failed_until[i]=bd_mono_ms()+2000;
+                    else {
+                        f.valid=0;
+                        have_ambient=0;
+                    }
+                    break;
+                }
+                if (!rc) { f.valid &= ~(1u<<k); continue; }
+                if (k == BD_BOOST) {
+                    if (!(f.valid & (1u<<BD_BARO)) || bd_mono_ms()-observed[BD_BARO]>=BD_TEMP_STALE_MS)
+                        continue;
+                    v=(v-f.value[BD_BARO])*.145037738;
+                }
+                f.value[k]=v; observed[k]=bd_mono_ms(); f.valid |= 1u << k;
+                if (diag_link_on_most(&link) && !send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }
             }
-#else
             /* Not over MOST: the tunnel's echo check and 2 s wait do not suit this read. */
-            if (up && link.fd>=0 && ethanol && start>=next_ethanol && diag_running) {
+            if (up && link.fd>=0 && ethanol && !diesel && start>=next_ethanol && diag_running) {
                 /* Published MHD+ MG1 monitor layout. This is the tune's active
                  * ethanol percentage, distinct from the raw ECA sensor. */
                 const unsigned char query[]={0x2c,0x88,0x01}, prefix[]={0x6c,0x88};
@@ -579,7 +667,6 @@ int main(int argc, char **argv) {
                     if (n==-1) diag_link_drop(&link);
                 }
             }
-#endif
 #endif
             if (diag_link_on_most(&link)) scanned=1;
             else if (link.fd>=0) {
@@ -602,3 +689,5 @@ int main(int argc, char **argv) {
     return most_lost ? 1 : 0;
 }
 #endif
+
+#endif /* Evo Y / upstream implementation */

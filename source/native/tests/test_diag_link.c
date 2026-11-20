@@ -395,7 +395,7 @@ static void test_loop_busy_lease_minus3(void)
     finish(&l);
 }
 
-static void test_oneshot_busy_waits_2s(void)
+static void test_oneshot_busy_waits_3s(void)
 {
     struct diag_link l;
     uint64_t t0, dt;
@@ -406,7 +406,7 @@ static void test_oneshot_busy_waits_2s(void)
     CHECK(diag_link_reserve_oneshot(&l) == 0);
     CHECK(errno == EADDRINUSE);
     dt = bd_mono_ms() - t0;
-    CHECK(dt >= 1950 && dt <= 2300);
+    CHECK(dt >= 2950 && dt <= 3500);
     release_holder(holder);
     CHECK(diag_link_reserve_oneshot(&l) == 1);
     CHECK(reserve_gateway() < 0);    /* held for the run */
@@ -649,7 +649,7 @@ int main(void)
     RUN(test_failed_open_retries_after_30s);
     RUN(test_oneshot_failed_open_is_final);
     RUN(test_loop_busy_lease_minus3);
-    RUN(test_oneshot_busy_waits_2s);
+    RUN(test_oneshot_busy_waits_3s);
     RUN(test_hsfz_session_lease);
     RUN(test_reply_cap);
     RUN(test_reply_over_cap);

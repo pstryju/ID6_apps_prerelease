@@ -28,15 +28,25 @@ python3 -m pip install Pillow
 sh native/build.sh
 ```
 
-The script builds the native libraries and diagnostic workers. The dashboard diagnostic workers use the [MOST fallback](MOST.md), which loads the DSI library at runtime. The MHD+ Suite package also includes the HSFZ Exhaust Flap worker from PR #29 as `MhdMaps/exhaust-flap-worker-qnx`. Use `native/tools/merge_exhaust_flap_page.py` to assemble the submenu from the original flap artwork and the MHD+ Suite image archive. The packaged XML and matching image archives must be deployed together.
+The script builds the native libraries and diagnostic workers. The dashboard diagnostic workers use the [MOST fallback](MOST.md), which loads the DSI library at runtime. The MHD+ Suite package also includes a dedicated Exhaust Flap worker as `MhdMaps/exhaust-flap-worker-qnx`. It uses the PR #29 commands and the shared HSFZ-to-MOST fallback. Use `native/tools/merge_exhaust_flap_page.py` to assemble the submenu from the original flap artwork and the MHD+ Suite image archive. The packaged XML and matching image archives must be deployed together.
 
 ## New firmware
 
-Use the [unlisted firmware runbook](../../AgentReadMe.md#bring-up-an-unlisted-firmware) and [read-only capture tool](../tools/capture_headunit.py) to collect the platform, display, and framework evidence before building a candidate profile.
+Use the [car identification steps](../../AgentReadMe.md#identify-the-car), the [porting workflow](PORTING.md), and the [read-only capture tool](../tools/capture_headunit.py) to collect the platform, display, and framework evidence before building a candidate profile.
 
-Read `/opt/sys/etc/nbt_version.txt`, `uname -a`, and `/opt/sys/bin/LayerManagerControl get screen 0` over SSH. Record the on-screen version and known iDrive pixel resolution if the corresponding automatic query fails. Compare the two framework hashes with the reference table in `AgentReadMe.md`. For a different pair, compare static ABI evidence with the already tested reference using `native/tools/audit_framework_abi.py` with `pyelftools` and `capstone`. Verify all imported symbols, constructor signatures, and vtable slots, then run a parked load and lifecycle test on that firmware. Static similarity alone does not establish runtime compatibility. Add a firmware entry only with matching evidence. Keep firmware approval separate from the vehicle's DME/EGS signal mapping.
+Read `/opt/sys/etc/nbt_version.txt`, `uname -a`, and `/opt/sys/bin/LayerManagerControl get screen 0` over SSH. Record the on-screen version and known iDrive pixel resolution if the corresponding automatic query fails. Compare the two framework hashes with the reference table in `AgentReadMe.md`. A firmware code with an exact match for both framework hashes can reuse the existing installer profile. For a different pair, compare static ABI evidence with the already tested reference using `native/tools/audit_framework_abi.py` with `pyelftools` and `capstone`. Verify all imported symbols, constructor signatures, and vtable slots, then run a parked load and lifecycle test on that firmware. Static similarity alone does not establish runtime compatibility. Add a firmware entry only with matching evidence. Keep firmware approval separate from the vehicle's DME/EGS signal mapping.
 
-For example, compare the candidate against an independently preserved reference library pair:
+The committed [framework fingerprint](../native/framework-fingerprint.json) lets you run this audit with only your own captured pair. It holds the symbol names, sizes, vtable relocation slots, and SHA-256 digests of the NBTevo_N18032I reference pair for the functions the packaged plugins import. It contains no framework code. Install the two Python packages, extract the plugin libraries from [packages/](../../packages/), and audit all of them in one run:
+
+```sh
+python3 -m pip install pyelftools capstone
+python3 native/tools/audit_framework_abi.py \
+  --fingerprint native/framework-fingerprint.json \
+  --installed-dir /private/candidate-frameworks \
+  --plugin /private/plugins/lib*.so --report /private/abi-report.json
+```
+
+The published ten-build [static comparison](COMPATIBILITY.md#static-framework-checks) used S19221I as its reference. To compare against a reference pair you hold yourself, pass its directory:
 
 ```sh
 python3 native/tools/audit_framework_abi.py \
@@ -45,4 +55,31 @@ python3 native/tools/audit_framework_abi.py \
   --plugin native/out/libBoostDeck.so --report /private/boostdeck-abi-report.json
 ```
 
-Repeat for ShiftDeck and MHD Maps and inspect the report's limitations. The tool compares selected instruction prefixes and vtable relocation slots. It does not simulate HMI calls or prove that a matched framework works at runtime.
+After changing a plugin's framework imports, regenerate the fingerprint from the private reference pair with `--reference-dir`, `--plugin` for every packaged plugin, `--emit-fingerprint native/framework-fingerprint.json`, and `--label`. `native/tests/test_fingerprint.py` checks that the fingerprint covers the packaged plugin imports and expected vtables.
+
+Inspect the report's limitations. The tool checks required imports, function instruction prefixes, and expected vtable relocation slots. It does not simulate HMI calls or prove that a matched framework works at runtime.
+
+## Build HUD Gauges
+
+Set `NBTAAD_SOURCE` to the absolute path of `milestone-7/src` from the licensed [NBT-AAD reference source](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/tree/f97f1a34bdf68f1861862bd6361a2918949a48f2/milestone-7). Run `sh native/build.sh` to produce the optional HUD library and worker. HUD retains the original 6WA handle map and factory-navigation ownership checks. The rebuilt worker accepts a configured gateway IPv4 address. A cluster that rejects the reference handles still requires a parked HUD protocol capture for porting.
+
+## Evo Y candidate versus upstream gauges
+
+`tools/build-dashboard.ps1` remains the local Evo Y build. It defines
+`BD_STOCK_DME` and `BD_NATIVE_CDS`, keeps ShiftDeck on CDS and BoostDeck on
+its dedicated MOST worker plus CDS, and reads units from Evo. It does not
+install the upstream selectable-signal UI or replace the quarantined HUD trace.
+
+The upstream BoostDeck now uses selectable channels and NBG7 frames. Its
+NBG5 format means eleven fields, whereas this fork's validated stock NBG5
+means nine fields with oil temperature in slot 8. These are incompatible.
+`gauge_core.h`, `gauge_core.c`, `collector.c` and `plugin.cpp` select the
+preserved `evo_y_*` implementations at compile time for the candidate; ordinary
+builds use the updated upstream implementations. Never mix their plugins and
+workers. The shared extracted DID profiles remain in `src/profiles/`.
+
+`plugin/BoostDeck-EvoY.xml` matches the candidate renderer. The dashboard
+staging script selects it explicitly, then applies the stock background and
+removes manual unit actions. `plugin/BoostDeck.xml` belongs to the updated
+upstream renderer. Packaged upstream apps are not automatically added to the
+Evo Y installer.

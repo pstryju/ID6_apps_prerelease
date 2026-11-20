@@ -22,6 +22,7 @@
     </actions>
     <models>
       <raDataModel id="50" modelType="Richtext" />
+      <raDataModel id="53" modelType="Richtext" />
       <imageIdModel id="60" imageId="56000" />
       <imageIdModel id="61" imageId="56001" />
       <imageIdModel id="62" imageId="56002" />
@@ -89,12 +90,20 @@
               <property id="10" value="238" />
             </properties>
           </button>
+          <label id="155" model="53">
+            <properties>
+              <property id="20" value="24" />
+              <property id="21" value="351" />
+              <property id="9" value="1040" />
+              <property id="10" value="44" />
+            </properties>
+          </label>
           <label id="150" model="50">
             <properties>
               <property id="20" value="24" />
-              <property id="21" value="372" />
+              <property id="21" value="397" />
               <property id="9" value="1040" />
-              <property id="10" value="55" />
+              <property id="10" value="32" />
             </properties>
           </label>
         </components>

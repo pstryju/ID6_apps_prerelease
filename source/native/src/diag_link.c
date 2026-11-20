@@ -41,7 +41,7 @@ static int transfer(int fd, unsigned char *buf, size_t n, int sending, uint64_t 
     }
     return n == 0;
 }
-int diag_hsfz_connect(const char *host, unsigned port) {
+static int connect_ipv4(const char *host, unsigned port) {
     struct sockaddr_in a;
     int fd, error = 0, no_delay = 1;
     socklen_t len = sizeof error;
@@ -59,6 +59,60 @@ int diag_hsfz_connect(const char *host, unsigned port) {
         close(fd); return -1;
     }
     return fd;
+}
+
+/* HSFZ UDP identification on the wired link-local subnet. Require a single
+ * diagnostic gateway (DIAGADR10); head-unit replies have different tags. */
+static int discover_gateway(char host[16]) {
+    const unsigned char query[] = {0,0,0,0,0,0x11};
+    const char tag[] = "DIAGADR10";
+    int fd=socket(AF_INET, SOCK_DGRAM, 0);
+    int enable=1, matches=0;
+    struct sockaddr_in dest;
+    struct in_addr found;
+    if (fd<0) return 0;
+    memset(&dest,0,sizeof dest);
+    dest.sin_family=AF_INET;
+    dest.sin_addr.s_addr=htonl(0xa9feffffu);
+    dest.sin_port=htons(6811);
+    if (setsockopt(fd,SOL_SOCKET,SO_BROADCAST,&enable,sizeof enable)==0 &&
+        fcntl(fd,F_SETFL,O_NONBLOCK)==0 &&
+        sendto(fd,query,sizeof query,0,(struct sockaddr*)&dest,sizeof dest)==(ssize_t)sizeof query) {
+        uint64_t until=bd_mono_ms()+600;
+        while (ready(fd,POLLIN,until)) {
+            unsigned char reply[1024];
+            struct sockaddr_in sender;
+            socklen_t size=sizeof sender;
+            ssize_t count=recvfrom(fd,reply,sizeof reply,0,(struct sockaddr*)&sender,&size);
+            if (count<6 || size<sizeof sender || sender.sin_family!=AF_INET) continue;
+            uint32_t ip=ntohl(sender.sin_addr.s_addr);
+            if ((ip & 0xffff0000u)!=0xa9fe0000u || (ip & 0x0000ff00u)==0 ||
+                (ip & 0x0000ff00u)==0x0000ff00u || reply[4]!=0 || reply[5]!=0x11) continue;
+            for (ssize_t i=6;i+(ssize_t)sizeof tag<=count;++i) {
+                if (memcmp(reply+i,tag,sizeof tag-1) || (reply[i+sizeof tag-1]>='0' &&
+                    reply[i+sizeof tag-1]<='9')) continue;
+                if (matches && found.s_addr!=sender.sin_addr.s_addr) {
+                    close(fd);
+                    return 0;
+                }
+                found=sender.sin_addr;
+                matches=1;
+                break;
+            }
+        }
+    }
+    close(fd);
+    return matches && inet_ntop(AF_INET,&found,host,16)!=0;
+}
+
+int diag_hsfz_connect(const char *host, unsigned port) {
+    if (strcmp(host,"auto")) return connect_ipv4(host,port);
+    char candidate[16];
+    /* Preserve the established address when it answers, and try discovery only
+     * on the default vehicle port when the established endpoint is unreachable. */
+    int fd=connect_ipv4("169.254.21.3",port);
+    if (fd>=0 || port!=6801 || !discover_gateway(candidate)) return fd;
+    return connect_ipv4(candidate,port);
 }
 
 /* Callers supply the UDS service, target, and response prefix. */
@@ -104,7 +158,7 @@ int diag_hsfz_exchange(int fd, unsigned ecu, const unsigned char *uds, unsigned 
 /* A DSI send has no timeout, so once MOST is in use SIGALRM's default action bounds every loop and the
  * shutdown. */
 enum { LOOP_FAILS_TO_MOST = 5, MOST_OPEN_MS = 2000, MOST_RETRY_MS = 30000, MOST_WAIT_MIN_MS = 2000,
-       LOOP_WATCHDOG_S = 60, STOP_WATCHDOG_S = 15, LOOP_LEASE_WAIT_MS = 300, ONESHOT_LEASE_WAIT_MS = 2000,
+       LOOP_WATCHDOG_S = 60, STOP_WATCHDOG_S = 15, LOOP_LEASE_WAIT_MS = 300, ONESHOT_LEASE_WAIT_MS = 3000,
        LEASE_POLL_MS = 20, MOST_YIELD_MS = 100 };
 static volatile sig_atomic_t most_armed;
 
@@ -143,8 +197,11 @@ static int take_lease(unsigned wait_ms) {
     uint64_t until = bd_mono_ms() + wait_ms;
     for (;;) {
         int lock = reserve_gateway();
-        if (lock >= 0 || errno != EADDRINUSE || !diag_running || bd_mono_ms() >= until) return lock;
-        poll(0, 0, LEASE_POLL_MS);
+        uint64_t now;
+        if (lock >= 0 || errno != EADDRINUSE || !diag_running) return lock;
+        now = bd_mono_ms();
+        if (now >= until) return lock;
+        poll(0, 0, until - now < LEASE_POLL_MS ? (int)(until - now) : LEASE_POLL_MS);
     }
 }
 

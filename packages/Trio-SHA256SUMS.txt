@@ -1,0 +1,2 @@
+34459aa3df1772b6508cb0df3363cea745382a75b4b20dd2f7ee8d8d20049f6b  NBT-Evo-Trio-Collector-Windows-x64.zip
+b197abc0b83049c6b1dd5df41e77ea21ed1f3b367274fffca3e8d7bbaa6dbe48  NBT-Evo-Trio-Collector-macOS.zip

@@ -33,20 +33,45 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
     pid_t child_;
     int pipe_;
     unsigned generation_;
-#ifdef PERF_LAB
+#if defined(PERF_LAB) || defined(BM3_ONLY)
     unsigned resultModel_;
 #endif
     char result_[128];
     size_t used_;
+#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
+    unsigned acceptedMap_; // 0 until the DME echoes a map request
+    int acceptedCooling_; // -1 until the DME echoes a cooling request
+#endif
 
     void status(const char* value) {
-#ifdef PERF_LAB
+#if defined(PERF_LAB) || defined(BM3_ONLY)
         updateModel(resultModel_,bmw::BasicString<char>(value));
 #else
         updateModel(50u,bmw::BasicString<char>(value));
 #endif
     }
 #if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
+    void showAcceptedSettings() {
+        const char* cooling=acceptedCooling_<0 ? "Unknown" : acceptedCooling_ ? "On" : "Off";
+        char map[12]="Unknown";
+        if (acceptedMap_) snprintf(map,sizeof map,"%u",acceptedMap_);
+        char text[80];
+        snprintf(text,sizeof text,"Last accepted   |   Map %s   |   Max Cooling %s",map,cooling);
+        updateModel(53u,bmw::BasicString<char>(text));
+    }
+    void rememberAcceptedSettings() {
+        const char prefix[]="Accepted by DME: Map ";
+        if (resultModel_==50u && !strncmp(result_,prefix,sizeof prefix-1) &&
+            strlen(result_)==sizeof prefix && result_[sizeof prefix-1]>='1' &&
+            result_[sizeof prefix-1]<='4') {
+            acceptedMap_=static_cast<unsigned>(result_[sizeof prefix-1]-'0');
+        } else if (resultModel_==52u) {
+            if (!strcmp(result_,"Accepted by DME: Max Cooling on")) acceptedCooling_=1;
+            else if (!strcmp(result_,"Accepted by DME: Max Cooling off")) acceptedCooling_=0;
+            else return;
+        } else return;
+        showAcceptedSettings();
+    }
     void coolingTiles(const char* reply) {
         updateModel(63u,bmw::ImageID(!strcmp(reply,"Accepted by DME: Max Cooling off") ? 56011u : 56010u));
         updateModel(64u,bmw::ImageID(!strcmp(reply,"Accepted by DME: Max Cooling on") ? 56013u : 56012u));
@@ -80,11 +105,11 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
         reap();
         if (pipe_>=0 || child_>0) return true;
         ++generation_; // a prior result's dismissal cannot erase this request
-#ifdef PERF_LAB
+#if defined(PERF_LAB) || defined(BM3_ONLY)
 #ifdef XDRIVE_ONLY
         resultModel_=50u;
 #else
-        resultModel_=49u+Function;
+        resultModel_=Function==5 ? 50u : 49u+Function;
 #endif
 #endif
 #if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
@@ -96,7 +121,8 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
 #if defined(XDRIVE_ONLY)
         const char* mode=Function==1 ? "--status" : "--drive-mode";
 #elif defined(BM3_ONLY)
-        const char* mode=Function==1 ? "--map" : Function==2 ? "--flap" : Function==3 ? "--sound" : "--burbles";
+        const char* mode=Function==1 ? "--map" : Function==2 ? "--flap" : Function==3 ? "--sound" :
+                         Function==4 ? "--burbles" : "--current-map";
 #else
         const char* mode=Function==1 ? "--map" : Function==2 ? "--flap" : "--cooling";
 #endif
@@ -122,21 +148,34 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
         used_=0;
         char message[32];
         if (Function==1 && strcmp(mode,"--status")) snprintf(message,sizeof message,"Requesting map %u...",Value);
+        else if (Function==5) snprintf(message,sizeof message,"Reading current map...");
         else snprintf(message,sizeof message,"Sending request...");
         status(message);
         postPoll();
         return true;
     }
 
+#ifdef BM3_ONLY
+    bool readMapOnEntry(const bmw::Parcel& event) {
+        bool visible;
+        if (event.readBool(visible) && visible) return selectMap<0,5>(event);
+        return true;
+    }
+#endif
+
 public:
     CONTROL_APP_CLASS(bmw::IDispatcher& d,bmw::BasicString<char> name,unsigned maj,unsigned min,
             bmw::RHMIInterfaceVersion version,const bmw::Bundle& cfg,const bmw::Bundle& res)
         : PluginApp(d,name,maj,min,version,cfg,res),child_(-1),pipe_(-1),
           generation_(0),
-#ifdef PERF_LAB
+#if defined(PERF_LAB) || defined(BM3_ONLY)
           resultModel_(50u),
 #endif
-          used_(0) {}
+          used_(0)
+#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
+          ,acceptedMap_(0),acceptedCooling_(-1)
+#endif
+           {}
     virtual ~CONTROL_APP_CLASS() { stopWorker(); }
     virtual bool onFinalize() { stopWorker(); return true; }
     virtual bool onInit() {
@@ -160,7 +199,7 @@ public:
         addHandler(23u,action);
         action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<4,1> >;
         addHandler(24u,action);
-#ifdef PERF_LAB
+#if defined(PERF_LAB) || defined(BM3_ONLY)
         action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<0,2> >;
         addHandler(25u,action);
         action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<1,2> >;
@@ -180,6 +219,8 @@ public:
         addHandler(32u,action);
         action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<3,4> >;
         addHandler(33u,action);
+        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::readMapOnEntry>;
+        addHandler(100u,11u,action);
 #endif
 #endif
 #endif
@@ -187,6 +228,7 @@ public:
 #if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
         coolingTiles("");
         flapTiles("");
+        showAcceptedSettings();
 #endif
         if (child_>0) postPoll();
         return true;
@@ -206,11 +248,13 @@ public:
                 while (used_ && (result_[used_-1]=='\n' || result_[used_-1]=='\r')) --used_;
                 result_[used_]=0;
 #if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
+                rememberAcceptedSettings();
                 if (resultModel_==52u) coolingTiles(result_);
                 if (resultModel_==51u && !strncmp(result_,"Confirmed: Exhaust ",19)) flapTiles(result_);
 #endif
                 status(used_ ? result_ : "No result received from the diagnostic worker.");
-                if (!strncmp(result_,"Confirmed: ",11)) postStatusEvent(kMapClear,3500u);
+                if (!strncmp(result_,"Confirmed: ",11) || !strncmp(result_,"Accepted by DME: Map ",21))
+                    postStatusEvent(kMapClear,3500u);
             }
         }
         reap();
