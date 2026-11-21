@@ -14,7 +14,8 @@ cd C:\Users\pawel\Developer\ID6_apps
 | Sprawdzenie SSH | `.\Test-Evo-SSH.cmd` |
 | Instalacja BoostDeck + ShiftDeck | `.\Install-Evo.cmd` |
 | Instalacja Engine Fault Codes | `.\Install-Evo.cmd -Apps EngineCodes` |
-| Instalacja HUD | `.\Install-Evo.cmd -Apps HudTest` |
+| HUD z łukiem z main, RPM z CDS | `.\Install-Evo.cmd -Apps HudTest -HudVariant UpstreamCds` |
+| Oryginalny HUD z main, odczyty HSFZ | `.\Install-Evo.cmd -Apps HudTest -HudVariant Upstream` |
 | Instalacja xDrive Control | `.\Install-Evo.cmd -Apps XDriveControl` |
 | Instalacja LaunchDeck, Road Jet i BEAMer | `.\Install-Evo.cmd -AppSet Activities` |
 | Instalacja LaunchDeck | `.\Install-Evo.cmd -Apps LaunchDeck` |
@@ -214,3 +215,27 @@ odczyt do każdej pozycji. Układy benzyny i Diesla oraz kolor są zapisywane po
 folderem aplikacji. Domyślnie pozostają nasze odczyty, z RPM i temperaturą oleju.
 Jednostki temperatury i prędkości są pobierane z Evo; ręcznych opcji jednostek
 nie ma. Wybranie pozycji w menu nie gwarantuje, że DME udostępnia ten odczyt.
+## HUD z głównego repozytorium
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File source/tools/build-hud-upstream.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File source/tools/check-hud-upstream.ps1
+.\Install-Evo.cmd -Apps HudTest -HudVariant UpstreamCds
+```
+
+`UpstreamCds` zachowuje kod rysowania łuku 0–8000 RPM i menu z main, a RPM
+pobiera przez CDS. Odczyt boost nie jest dostępny w tym wariancie: oryginalne
+pole pokaże `--`. Nie uruchamia połączenia HSFZ ani dodatkowej diagnostyki DME.
+Checkbox zapisuje stan zgodnie z implementacją main i przywraca go po restarcie;
+ponowna instalacja całego folderu może zresetować zapisany stan.
+
+`-HudVariant Upstream` instaluje pliki z `packages/hud-gauges.zip` bez zmian.
+Ten oryginał odczytuje RPM i boost przez HSFZ, więc wymaga działającego gatewaya.
+`-HudVariant Legacy` wybiera naszą dotychczasową linię RPM. Parametr domyślnie
+pozostaje `Legacy`, także w zestawie `Extras`; nowy łuk wybieraj jawnie.
+
+Warianty zastępują ten sam folder HudTest i nie powinny działać jednocześnie.
+Po instalacji wykonaj standardowy ręczny restart iDrive. `.\Uninstall-Evo.cmd`
+przywraca folder sprzed ostatniej instalacji. Renderowanie i oddawanie obszaru
+nawigacji są przejęte z main; zachowanie na tym HUD wymaga sprawdzenia w aucie.
+Pasywny `hud-trace-qnx` pozostaje zablokowany.

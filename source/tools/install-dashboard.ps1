@@ -4,6 +4,7 @@ param(
     [ValidateSet('BoostDeck','ShiftDeck','EngineCodes','HudTest','XDriveControl','LaunchDeck','RoadJet','BEAMer')]
     [string[]]$Apps = @('BoostDeck','ShiftDeck'),
     [ValidateSet('Core','All','Gauges','Extras','Activities')][string]$AppSet = 'Gauges',
+    [ValidateSet('Legacy','Upstream','UpstreamCds')][string]$HudVariant = 'Legacy',
     [switch]$Parked,
     [switch]$Legacy,
     [string]$IdentityFile,
@@ -36,16 +37,29 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $output 'SHA256SUMS')) {
     $sums[$matches[2]] = $matches[1]
 }
 $items = @()
+$sourceFolders=@{}
 Write-EvoStatus '[1/5] Sprawdzanie kompletnosci i sum lokalnych plikow'
 foreach ($app in $Apps) {
     $folder = Join-Path $candidate $app
+    $appSums=$sums
+    if($app -eq 'HudTest' -and $HudVariant -ne 'Legacy'){
+        $variantOutput=Join-Path $output "hud-variants/$HudVariant"
+        $folder=Join-Path $variantOutput 'HudTest'
+        if(-not (Test-Path -LiteralPath (Join-Path $variantOutput 'SHA256SUMS'))){throw 'Build HUD variants first: source/tools/build-hud-upstream.ps1'}
+        $appSums=@{}
+        foreach($line in Get-Content -LiteralPath (Join-Path $variantOutput 'SHA256SUMS')){
+            if($line -notmatch '^([a-f0-9]{64})  (.+)$'){throw 'Invalid HUD variant SHA256SUMS'}
+            $appSums[$matches[2]]=$matches[1]
+        }
+    }
+    $sourceFolders[$app]=$folder
     [xml]$manifest = [IO.File]::ReadAllText((Join-Path $folder "$app.manifest"))
     $connector = [int]$manifest.plugin.config.dependencies.pluginAppConnector.id
     $files = @(foreach ($file in Get-ChildItem -LiteralPath $folder -File) {
         $relative = "$app/$($file.Name)"
-        if ($file.Name -notmatch '^[A-Za-z0-9_.-]+$' -or -not $sums.ContainsKey($relative)) { throw "Unlisted file: $relative" }
+        if ($file.Name -notmatch '^[A-Za-z0-9_.-]+$' -or -not $appSums.ContainsKey($relative)) { throw "Unlisted file: $relative" }
         $hash = Get-BytesHash ([IO.File]::ReadAllBytes($file.FullName))
-        if ($hash -ne $sums[$relative]) { throw "Local checksum mismatch: $relative" }
+        if ($hash -ne $appSums[$relative]) { throw "Local checksum mismatch: $relative" }
         @{ name=$file.Name; sha256=$hash }
     })
     $expectedNames=@("$app.manifest", "$app.xml", "lib$app.so")
@@ -61,7 +75,10 @@ foreach ($app in $Apps) {
         $expectedNames += @("${app}_ALL_Images.zip")
         if($app -in @('BoostDeck','EngineCodes','LaunchDeck','RoadJet','BEAMer')){$expectedNames += $worker}
     }
-    if($app -eq 'HudTest'){$expectedNames+=@('hud-display-qnx','LICENSE.txt','NOTICE.txt')}
+    if($app -eq 'HudTest'){
+        $hudWorker=if($HudVariant -eq 'Legacy'){'hud-display-qnx'}else{'hud-shape-qnx'}
+        $expectedNames+=@($hudWorker,'LICENSE.txt','NOTICE.txt')
+    }
     if($app -eq 'XDriveControl'){$expectedNames+=@('xdrive-control-qnx','LICENSE.txt')}
     if (@(Compare-Object @($files | ForEach-Object { $_.name }) $expectedNames).Count) { throw "Incomplete or unexpected candidate files: $app" }
     $items += @{ name=$app; connector=$connector; files=$files; hadOriginal=$false }
@@ -72,6 +89,7 @@ $gatewayAddress=$null
 if (-not [Net.IPAddress]::TryParse($Gateway,[ref]$gatewayAddress) -or $gatewayAddress.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) { throw 'Gateway must be an IPv4 address.' }
 $Gateway=$gatewayAddress.ToString()
 Write-Host "Apps: $($Apps -join ', '). Two SSH sessions; no automatic restart."
+if('HudTest' -in $Apps){Write-Host "HUD variant: $HudVariant (replaces the existing HudTest app)"}
 if(@($Apps | Where-Object {$_ -in @('EngineCodes','XDriveControl','LaunchDeck','RoadJet','BEAMer')}).Count){Write-Host "Diagnostic gateway: $Gateway"}
 if('BoostDeck' -in $Apps){Write-Host "Engine profile: $EngineProfile (B48/N13 mappings await validation)"}
 if (-not $PSCmdlet.ShouldProcess($Head, "Install $($Apps -join ', ') using one verified bundle")) { return }
@@ -101,9 +119,10 @@ Write-EvoStatus "Deployment ID: $runId"
 $entries=@()
 foreach ($item in $items) {
     foreach ($file in $item.files) {
-        $entries+=@{name="stage/$($item.name)/$($file.name)"; bytes=[IO.File]::ReadAllBytes((Join-Path $candidate "$($item.name)/$($file.name)"))}
+        $entries+=@{name="stage/$($item.name)/$($file.name)"; bytes=[IO.File]::ReadAllBytes((Join-Path $sourceFolders[$item.name] $file.name))}
     }
-    if ($item.name -in @('EngineCodes','XDriveControl','LaunchDeck','RoadJet','BEAMer')) {
+    if ($item.name -in @('EngineCodes','XDriveControl','LaunchDeck','RoadJet','BEAMer') -or
+        ($item.name -eq 'HudTest' -and $HudVariant -eq 'Upstream')) {
         $bytes=[Text.Encoding]::ASCII.GetBytes($Gateway+"`n")
         $item.files+=@{name='gateway-ip.txt';sha256=(Get-BytesHash $bytes)}
         $entries+=@{name="stage/$($item.name)/gateway-ip.txt";bytes=$bytes}
@@ -114,7 +133,7 @@ foreach ($item in $items) {
         $entries+=@{name="stage/$($item.name)/engine-profile.txt";bytes=$bytes}
     }
 }
-$receipt=[ordered]@{schema=1;runId=$runId;head=$Head;state='Prepared';remoteRun=$run;gateway=$Gateway;engineProfile=$EngineProfile;apps=$items}
+$receipt=[ordered]@{schema=1;runId=$runId;head=$Head;state='Prepared';remoteRun=$run;gateway=$Gateway;engineProfile=$EngineProfile;hudVariant=$HudVariant;apps=$items}
 $receiptDir=Get-EvoReceiptDirectory
 New-Item -ItemType Directory -Force $receiptDir | Out-Null
 $receiptPath=Join-Path $receiptDir "$runId.json"

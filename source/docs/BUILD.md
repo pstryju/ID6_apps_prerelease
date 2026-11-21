@@ -61,7 +61,20 @@ Inspect the report's limitations. The tool checks required imports, function ins
 
 ## Build HUD Gauges
 
-Set `NBTAAD_SOURCE` to the absolute path of `milestone-7/src` from the licensed [NBT-AAD reference source](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/tree/f97f1a34bdf68f1861862bd6361a2918949a48f2/milestone-7). Run `sh native/build.sh` to produce the optional HUD library and worker. HUD retains the original 6WA handle map and factory-navigation ownership checks. The rebuilt worker accepts a configured gateway IPv4 address. A cluster that rejects the reference handles still requires a parked HUD protocol capture for porting.
+The original HUD package is retained in `packages/hud-gauges.zip`. For the Evo Y
+comparison, run `tools/build-hud-upstream.ps1` and
+`tools/check-hud-upstream.ps1` from the repo root with PowerShell. The script
+builds against the local Evo framework pair and pins a compatible licensed
+NBT-AAD dependency from the neighboring Git repository. It prepares the exact
+upstream package and a CDS-RPM version; `native/hud/hud_shape.cpp` is unchanged.
+See [HUD source notes](../native/hud/README.md) for the dependency revision.
+
+Install explicitly with `Install-Evo.cmd -Apps HudTest -HudVariant UpstreamCds`
+(CDS RPM, boost unavailable) or `-HudVariant Upstream` (original HSFZ reader).
+The old line renderer remains `-HudVariant Legacy`, the existing default.
+These variants use the same plugin folder/connector; install one and restart
+HMI manually. Navigation handover remains upstream behavior and needs a vehicle
+test. The failed passive observer remains quarantined.
 
 ## Evo Y candidate and configurable BoostDeck
 
